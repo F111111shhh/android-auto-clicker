@@ -8,7 +8,6 @@ import android.graphics.Color;
 import android.graphics.Typeface;
 import android.os.Build;
 import android.os.Bundle;
-import android.provider.Settings;
 import android.text.InputType;
 import android.text.TextUtils;
 import android.view.Gravity;
@@ -37,6 +36,10 @@ public class MainActivity extends android.app.Activity {
     private EditText centerXInput;
     private EditText centerYInput;
     private EditText radiusInput;
+    private EditText fixedXInput;
+    private EditText fixedYInput;
+    private EditText opacityInput;
+    private EditText collapseDelayInput;
     private CompoundButton infiniteSwitch;
     private CompoundButton randomPointSwitch;
     private CompoundButton randomIntervalSwitch;
@@ -48,6 +51,10 @@ public class MainActivity extends android.app.Activity {
     private TextView circleSegment;
     private LinearLayout rectFields;
     private LinearLayout circleFields;
+    private LinearLayout randomRangeFields;
+    private LinearLayout fixedPointFields;
+    private View countBlock;
+    private View jitterBlock;
     private ClickConfig config;
     private String regionMode = ClickConfig.REGION_RECT;
     private boolean receiverRegistered;
@@ -96,7 +103,7 @@ public class MainActivity extends android.app.Activity {
 
         LinearLayout root = new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
-        root.setPadding(dp(20), dp(20), dp(20), dp(30));
+        root.setPadding(dp(20), statusTopPadding(), dp(20), dp(30));
         scroll.addView(root, matchWrap());
 
         root.addView(header());
@@ -104,38 +111,26 @@ public class MainActivity extends android.app.Activity {
         root.addView(planCard(), topMargin(16));
         root.addView(rhythmCard(), topMargin(14));
         root.addView(regionCard(), topMargin(14));
+        root.addView(floatingCard(), topMargin(14));
         root.addView(actionPanel(), topMargin(18));
-
         return scroll;
     }
 
     private View header() {
-        LinearLayout row = new LinearLayout(this);
-        row.setOrientation(LinearLayout.HORIZONTAL);
-        row.setGravity(Gravity.CENTER_VERTICAL);
-
         LinearLayout titles = new LinearLayout(this);
         titles.setOrientation(LinearLayout.VERTICAL);
+
         TextView title = new TextView(this);
         title.setText("连点器");
         theme.title(title, 32);
+        titles.addView(title);
+
         TextView subtitle = new TextView(this);
         subtitle.setText("自动点击 · 悬浮控制");
         theme.body(subtitle, 13);
         subtitle.setPadding(0, dp(6), 0, 0);
-        titles.addView(title);
         titles.addView(subtitle);
-        row.addView(titles, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
-
-        Button permission = pillButton("权限");
-        permission.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View v) {
-                startActivity(new Intent(MainActivity.this, PermissionActivity.class));
-            }
-        });
-        row.addView(permission, new LinearLayout.LayoutParams(dp(82), dp(42)));
-        return row;
+        return titles;
     }
 
     private View statusCard() {
@@ -177,8 +172,15 @@ public class MainActivity extends android.app.Activity {
     private View planCard() {
         LinearLayout card = sectionCard("点击计划", "设置总次数，或保持运行直到手动停止。");
         infiniteSwitch = switchRow(card, "无限点击", "开启后忽略固定次数");
+        infiniteSwitch.setOnCheckedChangeListener(new CompoundButton.OnCheckedChangeListener() {
+            @Override
+            public void onCheckedChanged(CompoundButton buttonView, boolean isChecked) {
+                refreshEnabledStates();
+            }
+        });
         countInput = numberInput("固定次数", "100");
-        card.addView(inputBlock(countInput));
+        countBlock = inputBlock(countInput);
+        card.addView(countBlock);
         return card;
     }
 
@@ -186,26 +188,33 @@ public class MainActivity extends android.app.Activity {
         LinearLayout card = sectionCard("点击节奏", "控制点击间隔和时间浮动。");
         intervalInput = numberInput("点击间隔", "200 ms");
         jitterInput = numberInput("随机浮动", "30%");
-        card.addView(twoColumnInputs(intervalInput, jitterInput));
-        randomIntervalSwitch = switchRow(card, "不等间隔", "在基础间隔上下随机浮动");
+        card.addView(inputBlock(intervalInput));
+        randomIntervalSwitch = switchRow(card, "不等间隔", "开启后随机浮动才会生效");
+        randomIntervalSwitch.setOnCheckedChangeListener(new CompoundButton.OnCheckedChangeListener() {
+            @Override
+            public void onCheckedChanged(CompoundButton buttonView, boolean isChecked) {
+                refreshEnabledStates();
+            }
+        });
+        jitterBlock = inputBlock(jitterInput);
+        card.addView(jitterBlock);
         return card;
     }
 
     private View regionCard() {
-        LinearLayout card = sectionCard("点击范围", "选择坐标形状，也可以直接用悬浮层拖选。");
+        LinearLayout card = sectionCard("点击范围", "随机点击会严格落在所选范围内；关闭随机后使用固定点击点。");
 
-        LinearLayout segmentRow = new LinearLayout(this);
-        segmentRow.setOrientation(LinearLayout.HORIZONTAL);
-        segmentRow.setPadding(0, dp(12), 0, 0);
-        rectSegment = segment("矩形范围", MODE_RECT_ID);
-        circleSegment = segment("中心点半径", MODE_CIRCLE_ID);
-        segmentRow.addView(rectSegment, new LinearLayout.LayoutParams(0, dp(46), 1f));
-        LinearLayout.LayoutParams circleParams = new LinearLayout.LayoutParams(0, dp(46), 1f);
-        circleParams.setMargins(dp(8), 0, 0, 0);
-        segmentRow.addView(circleSegment, circleParams);
-        card.addView(segmentRow);
+        randomPointSwitch = switchRow(card, "区域内随机点击", "开启后使用下方矩形或圆形范围");
+        randomPointSwitch.setOnCheckedChangeListener(new CompoundButton.OnCheckedChangeListener() {
+            @Override
+            public void onCheckedChanged(CompoundButton buttonView, boolean isChecked) {
+                refreshEnabledStates();
+            }
+        });
 
-        randomPointSwitch = switchRow(card, "区域内随机点击", "关闭时点击范围中心点");
+        randomRangeFields = new LinearLayout(this);
+        randomRangeFields.setOrientation(LinearLayout.VERTICAL);
+        randomRangeFields.addView(regionSegments());
 
         leftInput = numberInput("左 X", "300");
         topInput = numberInput("上 Y", "600");
@@ -219,15 +228,28 @@ public class MainActivity extends android.app.Activity {
         rectFields.setOrientation(LinearLayout.VERTICAL);
         rectFields.addView(twoColumnInputs(leftInput, topInput));
         rectFields.addView(twoColumnInputs(rightInput, bottomInput));
-        card.addView(rectFields);
+        randomRangeFields.addView(rectFields);
 
         circleFields = new LinearLayout(this);
         circleFields.setOrientation(LinearLayout.VERTICAL);
         circleFields.addView(twoColumnInputs(centerXInput, centerYInput));
         circleFields.addView(inputBlock(radiusInput));
-        card.addView(circleFields);
+        randomRangeFields.addView(circleFields);
+        card.addView(randomRangeFields);
 
-        Button selectRegion = tonalButton("打开悬浮窗并选择范围");
+        fixedPointFields = new LinearLayout(this);
+        fixedPointFields.setOrientation(LinearLayout.VERTICAL);
+        fixedXInput = numberInput("固定点 X", "540");
+        fixedYInput = numberInput("固定点 Y", "900");
+        fixedPointFields.addView(twoColumnInputs(fixedXInput, fixedYInput));
+        TextView hint = new TextView(this);
+        hint.setText("关闭区域随机点击后，每次都会点击这个固定点。");
+        theme.body(hint, 12);
+        hint.setPadding(dp(2), dp(8), 0, 0);
+        fixedPointFields.addView(hint);
+        card.addView(fixedPointFields);
+
+        Button selectRegion = tonalButton("打开悬浮窗并选择范围/点击点");
         selectRegion.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
@@ -236,6 +258,27 @@ public class MainActivity extends android.app.Activity {
             }
         });
         card.addView(selectRegion, topMargin(12, LinearLayout.LayoutParams.MATCH_PARENT, dp(52)));
+        return card;
+    }
+
+    private View regionSegments() {
+        LinearLayout segmentRow = new LinearLayout(this);
+        segmentRow.setOrientation(LinearLayout.HORIZONTAL);
+        segmentRow.setPadding(0, dp(12), 0, 0);
+        rectSegment = segment("矩形范围", MODE_RECT_ID);
+        circleSegment = segment("中心点半径", MODE_CIRCLE_ID);
+        segmentRow.addView(rectSegment, new LinearLayout.LayoutParams(0, dp(46), 1f));
+        LinearLayout.LayoutParams circleParams = new LinearLayout.LayoutParams(0, dp(46), 1f);
+        circleParams.setMargins(dp(8), 0, 0, 0);
+        segmentRow.addView(circleSegment, circleParams);
+        return segmentRow;
+    }
+
+    private View floatingCard() {
+        LinearLayout card = sectionCard("悬浮窗", "设置悬浮面板透明度和自动收起时间。");
+        opacityInput = numberInput("透明度", "88%");
+        collapseDelayInput = numberInput("无操作后收起", "6 秒");
+        card.addView(twoColumnInputs(opacityInput, collapseDelayInput));
         return card;
     }
 
@@ -296,7 +339,12 @@ public class MainActivity extends android.app.Activity {
         centerXInput.setText(String.valueOf(Math.round(c.centerX)));
         centerYInput.setText(String.valueOf(Math.round(c.centerY)));
         radiusInput.setText(String.valueOf(Math.round(c.radius)));
+        fixedXInput.setText(String.valueOf(Math.round(c.fixedX)));
+        fixedYInput.setText(String.valueOf(Math.round(c.fixedY)));
+        opacityInput.setText(String.valueOf(c.overlayOpacityPercent));
+        collapseDelayInput.setText(String.valueOf(c.collapseDelaySeconds));
         refreshRegionMode();
+        refreshEnabledStates();
     }
 
     private void saveFromForm() {
@@ -317,6 +365,10 @@ public class MainActivity extends android.app.Activity {
         config.centerX = readFloat(centerXInput, 540f);
         config.centerY = readFloat(centerYInput, 900f);
         config.radius = readFloat(radiusInput, 120f);
+        config.fixedX = readFloat(fixedXInput, 540f);
+        config.fixedY = readFloat(fixedYInput, 900f);
+        config.overlayOpacityPercent = readInt(opacityInput, 88);
+        config.collapseDelaySeconds = readInt(collapseDelayInput, 6);
         config.save(this);
     }
 
@@ -484,6 +536,35 @@ public class MainActivity extends android.app.Activity {
         circleFields.setVisibility(circle ? View.VISIBLE : View.GONE);
     }
 
+    private void refreshEnabledStates() {
+        if (countBlock != null) {
+            setGroupEnabled(countBlock, !infiniteSwitch.isChecked());
+        }
+        if (jitterBlock != null) {
+            setGroupEnabled(jitterBlock, randomIntervalSwitch.isChecked());
+        }
+        boolean randomPoint = randomPointSwitch.isChecked();
+        if (randomRangeFields != null) {
+            setGroupEnabled(randomRangeFields, randomPoint);
+            randomRangeFields.setVisibility(randomPoint ? View.VISIBLE : View.GONE);
+        }
+        if (fixedPointFields != null) {
+            setGroupEnabled(fixedPointFields, !randomPoint);
+            fixedPointFields.setVisibility(randomPoint ? View.GONE : View.VISIBLE);
+        }
+    }
+
+    private void setGroupEnabled(View view, boolean enabled) {
+        view.setEnabled(enabled);
+        view.setAlpha(enabled ? 1f : 0.42f);
+        if (view instanceof android.view.ViewGroup) {
+            android.view.ViewGroup group = (android.view.ViewGroup) view;
+            for (int i = 0; i < group.getChildCount(); i++) {
+                setGroupEnabled(group.getChildAt(i), enabled);
+            }
+        }
+    }
+
     private void styleSegment(TextView view, boolean selected) {
         if (view == null) {
             return;
@@ -534,14 +615,6 @@ public class MainActivity extends android.app.Activity {
         Button button = baseButton(text);
         button.setTextColor(theme.text);
         button.setBackground(theme.ripple(theme.stroked(theme.surface, theme.outline, 18, this), theme.accent));
-        return button;
-    }
-
-    private Button pillButton(String text) {
-        Button button = baseButton(text);
-        button.setTextSize(14);
-        button.setTextColor(theme.accentStrong);
-        button.setBackground(theme.ripple(theme.rounded(theme.accentSoft, 24, this), theme.accent));
         return button;
     }
 
@@ -612,6 +685,12 @@ public class MainActivity extends android.app.Activity {
 
     private int dp(int value) {
         return UiTheme.dp(this, value);
+    }
+
+    private int statusTopPadding() {
+        int resourceId = getResources().getIdentifier("status_bar_height", "dimen", "android");
+        int status = resourceId == 0 ? dp(22) : getResources().getDimensionPixelSize(resourceId);
+        return status + dp(16);
     }
 
     private void registerReceiverCompat() {

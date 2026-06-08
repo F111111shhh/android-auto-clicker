@@ -38,7 +38,7 @@ public class PermissionActivity extends android.app.Activity {
         scroll.setBackgroundColor(theme.background);
         LinearLayout root = new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
-        root.setPadding(dp(20), dp(20), dp(20), dp(28));
+        root.setPadding(dp(20), statusTopPadding(), dp(20), dp(28));
         scroll.addView(root);
 
         LinearLayout header = new LinearLayout(this);
@@ -217,5 +217,11 @@ public class PermissionActivity extends android.app.Activity {
 
     private int dp(int value) {
         return UiTheme.dp(this, value);
+    }
+
+    private int statusTopPadding() {
+        int resourceId = getResources().getIdentifier("status_bar_height", "dimen", "android");
+        int status = resourceId == 0 ? dp(22) : getResources().getDimensionPixelSize(resourceId);
+        return status + dp(16);
     }
 }

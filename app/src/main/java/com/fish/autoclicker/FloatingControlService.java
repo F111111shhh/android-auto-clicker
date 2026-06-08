@@ -15,7 +15,9 @@ import android.graphics.Color;
 import android.graphics.Paint;
 import android.graphics.RectF;
 import android.os.Build;
+import android.os.Handler;
 import android.os.IBinder;
+import android.os.Looper;
 import android.provider.Settings;
 import android.view.Gravity;
 import android.view.MotionEvent;
@@ -32,13 +34,27 @@ public class FloatingControlService extends Service {
     private static final int NOTIFICATION_ID = 10;
     private static final String CHANNEL_ID = "auto_clicker_control";
 
+    private final Handler handler = new Handler(Looper.getMainLooper());
     private WindowManager windowManager;
+    private WindowManager.LayoutParams panelParams;
+    private WindowManager.LayoutParams bubbleParams;
     private View panelView;
+    private View bubbleView;
     private RegionOverlayView regionView;
     private TextView statusText;
     private Button pauseButton;
     private ClickConfig config;
     private UiTheme theme;
+    private boolean collapsed;
+    private int panelX;
+    private int panelY;
+
+    private final Runnable collapseRunnable = new Runnable() {
+        @Override
+        public void run() {
+            collapseToBubble();
+        }
+    };
 
     private final BroadcastReceiver stateReceiver = new BroadcastReceiver() {
         @Override
@@ -53,6 +69,8 @@ public class FloatingControlService extends Service {
         theme = UiTheme.from(this);
         windowManager = (WindowManager) getSystemService(WINDOW_SERVICE);
         config = ClickConfig.load(this);
+        panelX = dp(20);
+        panelY = dp(120);
         Notification notification = buildNotification();
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
             startForeground(NOTIFICATION_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE);
@@ -66,13 +84,17 @@ public class FloatingControlService extends Service {
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
         config = ClickConfig.load(this);
-        if (panelView == null) {
+        if (panelView == null && bubbleView == null) {
             showPanel();
+        } else {
+            applyOverlayAlpha();
         }
         if (intent != null && intent.getBooleanExtra(EXTRA_SELECT_REGION, false)) {
+            expandPanel();
             showRegionOverlay();
         }
         updateStatus("悬浮控制已打开");
+        scheduleCollapse();
         return START_STICKY;
     }
 
@@ -83,8 +105,10 @@ public class FloatingControlService extends Service {
 
     @Override
     public void onDestroy() {
+        handler.removeCallbacks(collapseRunnable);
         removeRegionOverlay();
         removePanel();
+        removeBubble();
         unregisterReceiver(stateReceiver);
         super.onDestroy();
     }
@@ -93,6 +117,9 @@ public class FloatingControlService extends Service {
         if (!Settings.canDrawOverlays(this) || panelView != null) {
             return;
         }
+        removeBubble();
+        collapsed = false;
+        config = ClickConfig.load(this);
 
         LinearLayout root = new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
@@ -121,7 +148,7 @@ public class FloatingControlService extends Service {
         LinearLayout row2 = new LinearLayout(this);
         row2.setOrientation(LinearLayout.HORIZONTAL);
         row2.setPadding(0, dp(7), 0, 0);
-        Button select = tonalButton("选区");
+        Button select = tonalButton(config.randomPoint ? "选区" : "定点");
         Button settings = tonalButton("设置");
         Button close = quietButton("关闭");
         row2.addView(select, buttonParams());
@@ -129,21 +156,23 @@ public class FloatingControlService extends Service {
         row2.addView(close, buttonParams());
         root.addView(row2);
 
-        WindowManager.LayoutParams params = overlayParams(
+        panelParams = overlayParams(
                 WindowManager.LayoutParams.WRAP_CONTENT,
                 WindowManager.LayoutParams.WRAP_CONTENT
         );
-        params.gravity = Gravity.TOP | Gravity.START;
-        params.x = dp(20);
-        params.y = dp(120);
+        panelParams.gravity = Gravity.TOP | Gravity.START;
+        panelParams.x = panelX;
+        panelParams.y = panelY;
+        panelParams.alpha = overlayAlpha();
 
-        root.setOnTouchListener(new DragTouchListener(params));
-        windowManager.addView(root, params);
+        root.setOnTouchListener(new DragTouchListener(panelParams, true));
+        windowManager.addView(root, panelParams);
         panelView = root;
 
         start.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
+                markInteraction();
                 config = ClickConfig.load(FloatingControlService.this);
                 if (!PermissionUtils.isAccessibilityEnabled(FloatingControlService.this)) {
                     Toast.makeText(FloatingControlService.this, "请先开启辅助功能服务", Toast.LENGTH_LONG).show();
@@ -156,24 +185,28 @@ public class FloatingControlService extends Service {
         pauseButton.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
+                markInteraction();
                 ClickController.get().pauseOrResume();
             }
         });
         stop.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
+                markInteraction();
                 ClickController.get().stop();
             }
         });
         select.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
+                markInteraction();
                 showRegionOverlay();
             }
         });
         settings.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
+                markInteraction();
                 Intent intent = new Intent(FloatingControlService.this, MainActivity.class);
                 intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
                 startActivity(intent);
@@ -187,6 +220,55 @@ public class FloatingControlService extends Service {
         });
 
         updateStatus("悬浮控制已打开");
+        scheduleCollapse();
+    }
+
+    private void showBubble() {
+        if (!Settings.canDrawOverlays(this) || bubbleView != null) {
+            return;
+        }
+        TextView bubble = new TextView(this);
+        bubble.setText("点");
+        bubble.setTextSize(17);
+        bubble.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
+        bubble.setGravity(Gravity.CENTER);
+        bubble.setTextColor(theme.onAccent());
+        bubble.setBackground(theme.ripple(theme.rounded(theme.accent, 28, this), theme.accentStrong));
+        bubble.setElevation(dp(10));
+
+        bubbleParams = overlayParams(dp(56), dp(56));
+        bubbleParams.gravity = Gravity.TOP | Gravity.START;
+        bubbleParams.x = Math.max(dp(8), panelX);
+        bubbleParams.y = Math.max(dp(80), panelY);
+        bubbleParams.alpha = Math.min(0.9f, overlayAlpha() + 0.08f);
+        bubble.setOnTouchListener(new DragTouchListener(bubbleParams, false));
+        bubble.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                expandPanel();
+            }
+        });
+        windowManager.addView(bubble, bubbleParams);
+        bubbleView = bubble;
+    }
+
+    private void collapseToBubble() {
+        if (collapsed || regionView != null || panelView == null) {
+            return;
+        }
+        if (panelParams != null) {
+            panelX = panelParams.x;
+            panelY = panelParams.y;
+        }
+        removePanel();
+        collapsed = true;
+        showBubble();
+    }
+
+    private void expandPanel() {
+        removeBubble();
+        collapsed = false;
+        showPanel();
     }
 
     private void showRegionOverlay() {
@@ -202,7 +284,8 @@ public class FloatingControlService extends Service {
         );
         params.gravity = Gravity.TOP | Gravity.START;
         windowManager.addView(regionView, params);
-        updateStatus("拖动选择范围");
+        updateStatus(config.randomPoint ? "拖动选择范围" : "点击选择固定点");
+        handler.removeCallbacks(collapseRunnable);
     }
 
     private void removeRegionOverlay() {
@@ -212,6 +295,7 @@ public class FloatingControlService extends Service {
             } catch (IllegalArgumentException ignored) {
             }
             regionView = null;
+            scheduleCollapse();
         }
     }
 
@@ -222,7 +306,48 @@ public class FloatingControlService extends Service {
             } catch (IllegalArgumentException ignored) {
             }
             panelView = null;
+            statusText = null;
+            pauseButton = null;
         }
+    }
+
+    private void removeBubble() {
+        if (bubbleView != null) {
+            try {
+                windowManager.removeView(bubbleView);
+            } catch (IllegalArgumentException ignored) {
+            }
+            bubbleView = null;
+        }
+    }
+
+    private void markInteraction() {
+        config = ClickConfig.load(this);
+        applyOverlayAlpha();
+        scheduleCollapse();
+    }
+
+    private void scheduleCollapse() {
+        handler.removeCallbacks(collapseRunnable);
+        if (!collapsed && panelView != null && regionView == null) {
+            handler.postDelayed(collapseRunnable, Math.max(3, config.collapseDelaySeconds) * 1000L);
+        }
+    }
+
+    private void applyOverlayAlpha() {
+        float alpha = overlayAlpha();
+        if (panelParams != null && panelView != null) {
+            panelParams.alpha = alpha;
+            windowManager.updateViewLayout(panelView, panelParams);
+        }
+        if (bubbleParams != null && bubbleView != null) {
+            bubbleParams.alpha = Math.min(0.9f, alpha + 0.08f);
+            windowManager.updateViewLayout(bubbleView, bubbleParams);
+        }
+    }
+
+    private float overlayAlpha() {
+        return Math.max(0.3f, Math.min(1f, config.overlayOpacityPercent / 100f));
     }
 
     private Button baseButton(String text) {
@@ -357,28 +482,51 @@ public class FloatingControlService extends Service {
 
     private final class DragTouchListener implements View.OnTouchListener {
         private final WindowManager.LayoutParams params;
+        private final boolean panel;
         private int startX;
         private int startY;
         private float touchX;
         private float touchY;
+        private boolean moved;
 
-        DragTouchListener(WindowManager.LayoutParams params) {
+        DragTouchListener(WindowManager.LayoutParams params, boolean panel) {
             this.params = params;
+            this.panel = panel;
         }
 
         @Override
         public boolean onTouch(View v, MotionEvent event) {
             switch (event.getActionMasked()) {
                 case MotionEvent.ACTION_DOWN:
+                    markInteraction();
                     startX = params.x;
                     startY = params.y;
                     touchX = event.getRawX();
                     touchY = event.getRawY();
+                    moved = false;
                     return true;
                 case MotionEvent.ACTION_MOVE:
-                    params.x = startX + Math.round(event.getRawX() - touchX);
-                    params.y = startY + Math.round(event.getRawY() - touchY);
+                    int dx = Math.round(event.getRawX() - touchX);
+                    int dy = Math.round(event.getRawY() - touchY);
+                    if (Math.abs(dx) + Math.abs(dy) > dp(4)) {
+                        moved = true;
+                    }
+                    params.x = startX + dx;
+                    params.y = startY + dy;
+                    if (panel) {
+                        panelX = params.x;
+                        panelY = params.y;
+                    } else {
+                        panelX = params.x;
+                        panelY = params.y;
+                    }
                     windowManager.updateViewLayout(v, params);
+                    return true;
+                case MotionEvent.ACTION_UP:
+                    if (!moved) {
+                        v.performClick();
+                    }
+                    scheduleCollapse();
                     return true;
                 default:
                     return false;
@@ -393,6 +541,7 @@ public class FloatingControlService extends Service {
         private final Paint textPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
         private final RectF rect = new RectF();
         private final ClickConfig draft;
+        private final boolean selectingRandomRange;
         private boolean circleMode;
         private float downX;
         private float downY;
@@ -402,6 +551,7 @@ public class FloatingControlService extends Service {
         RegionOverlayView(Context context, ClickConfig config) {
             super(context);
             this.draft = config;
+            this.selectingRandomRange = config.randomPoint;
             this.circleMode = ClickConfig.REGION_CIRCLE.equals(config.regionMode);
             dimPaint.setColor(Color.argb(128, 15, 23, 42));
             shapePaint.setStyle(Paint.Style.STROKE);
@@ -419,22 +569,29 @@ public class FloatingControlService extends Service {
             super.onDraw(canvas);
             canvas.drawRect(0, 0, getWidth(), getHeight(), dimPaint);
 
-            if (circleMode) {
-                canvas.drawCircle(draft.centerX, draft.centerY, draft.radius, shapePaint);
-                canvas.drawCircle(draft.centerX, draft.centerY, dp(6), handlePaint);
-                canvas.drawCircle(draft.centerX + draft.radius, draft.centerY, dp(7), handlePaint);
+            if (selectingRandomRange) {
+                if (circleMode) {
+                    canvas.drawCircle(draft.centerX, draft.centerY, draft.radius, shapePaint);
+                    canvas.drawCircle(draft.centerX, draft.centerY, dp(6), handlePaint);
+                    canvas.drawCircle(draft.centerX + draft.radius, draft.centerY, dp(7), handlePaint);
+                } else {
+                    rect.set(draft.rect());
+                    canvas.drawRect(rect, shapePaint);
+                    canvas.drawCircle(rect.left, rect.top, dp(7), handlePaint);
+                    canvas.drawCircle(rect.right, rect.bottom, dp(7), handlePaint);
+                }
             } else {
-                rect.set(draft.rect());
-                canvas.drawRect(rect, shapePaint);
-                canvas.drawCircle(rect.left, rect.top, dp(7), handlePaint);
-                canvas.drawCircle(rect.right, rect.bottom, dp(7), handlePaint);
+                canvas.drawCircle(draft.fixedX, draft.fixedY, dp(20), shapePaint);
+                canvas.drawCircle(draft.fixedX, draft.fixedY, dp(7), handlePaint);
             }
 
             drawButton(canvas, 0, "保存");
-            drawButton(canvas, 1, circleMode ? "矩形" : "圆形");
+            drawButton(canvas, 1, selectingRandomRange ? (circleMode ? "矩形" : "圆形") : "定点");
             drawButton(canvas, 2, "取消");
             textPaint.setColor(Color.WHITE);
-            canvas.drawText("拖动屏幕选择范围，底部按钮可保存或切换形状", dp(16), dp(34), textPaint);
+            canvas.drawText(selectingRandomRange
+                    ? "拖动屏幕选择范围，底部按钮可保存或切换形状"
+                    : "点击或拖动选择固定点击点", dp(16), dp(34), textPaint);
         }
 
         @Override
@@ -445,6 +602,12 @@ public class FloatingControlService extends Service {
                     downY = event.getY();
                     buttonMode = hitButton(downX, downY);
                     if (buttonMode != ButtonMode.NONE) {
+                        return true;
+                    }
+                    if (!selectingRandomRange) {
+                        draft.fixedX = clamp(downX, 0f, getWidth());
+                        draft.fixedY = clamp(downY, 0f, getHeight());
+                        invalidate();
                         return true;
                     }
                     draggingExisting = hitExistingShape(downX, downY);
@@ -466,6 +629,12 @@ public class FloatingControlService extends Service {
                     float x = event.getX();
                     float y = event.getY();
                     if (buttonMode != ButtonMode.NONE) {
+                        return true;
+                    }
+                    if (!selectingRandomRange) {
+                        draft.fixedX = clamp(x, 0f, getWidth());
+                        draft.fixedY = clamp(y, 0f, getHeight());
+                        invalidate();
                         return true;
                     }
                     if (circleMode) {
@@ -519,23 +688,25 @@ public class FloatingControlService extends Service {
             int height = Math.max(1, getHeight());
             if (circleMode) {
                 draft.radius = Math.max(1f, Math.min(draft.radius, Math.max(width, height)));
-                draft.centerX = Math.max(0f, Math.min(width, draft.centerX));
-                draft.centerY = Math.max(0f, Math.min(height, draft.centerY));
+                draft.centerX = clamp(draft.centerX, 0f, width);
+                draft.centerY = clamp(draft.centerY, 0f, height);
             } else {
-                draft.left = Math.max(0f, Math.min(width, draft.left));
-                draft.right = Math.max(0f, Math.min(width, draft.right));
-                draft.top = Math.max(0f, Math.min(height, draft.top));
-                draft.bottom = Math.max(0f, Math.min(height, draft.bottom));
+                draft.left = clamp(draft.left, 0f, width);
+                draft.right = clamp(draft.right, 0f, width);
+                draft.top = clamp(draft.top, 0f, height);
+                draft.bottom = clamp(draft.bottom, 0f, height);
             }
         }
 
         private void handleButton(ButtonMode mode) {
             if (mode == ButtonMode.SAVE) {
-                draft.regionMode = circleMode ? ClickConfig.REGION_CIRCLE : ClickConfig.REGION_RECT;
+                if (selectingRandomRange) {
+                    draft.regionMode = circleMode ? ClickConfig.REGION_CIRCLE : ClickConfig.REGION_RECT;
+                }
                 draft.save(FloatingControlService.this);
-                updateStatus("已保存范围");
+                updateStatus(selectingRandomRange ? "已保存范围" : "已保存固定点");
                 removeRegionOverlay();
-            } else if (mode == ButtonMode.TOGGLE) {
+            } else if (mode == ButtonMode.TOGGLE && selectingRandomRange) {
                 circleMode = !circleMode;
                 if (circleMode) {
                     RectF r = draft.rect();
@@ -562,11 +733,11 @@ public class FloatingControlService extends Service {
             float left = (getWidth() - total) / 2f + index * (width + gap);
             float top = getHeight() - dp(70);
             Paint buttonPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
-            boolean cancel = index == 2;
-            buttonPaint.setColor(cancel ? UiTheme.withAlpha(Color.WHITE, 238) : theme.accent);
+            boolean quiet = index == 2 || (!selectingRandomRange && index == 1);
+            buttonPaint.setColor(quiet ? UiTheme.withAlpha(Color.WHITE, 238) : theme.accent);
             RectF button = new RectF(left, top, left + width, top + height);
             canvas.drawRoundRect(button, dp(18), dp(18), buttonPaint);
-            textPaint.setColor(cancel ? theme.text : theme.onAccent());
+            textPaint.setColor(quiet ? theme.text : theme.onAccent());
             Paint.FontMetrics metrics = textPaint.getFontMetrics();
             float textX = left + (width - textPaint.measureText(text)) / 2f;
             float textY = top + (height - metrics.bottom + metrics.top) / 2f - metrics.top;
@@ -598,6 +769,10 @@ public class FloatingControlService extends Service {
             float dx = ax - bx;
             float dy = ay - by;
             return (float) Math.sqrt(dx * dx + dy * dy);
+        }
+
+        private float clamp(float value, float min, float max) {
+            return Math.max(min, Math.min(max, value));
         }
     }
 

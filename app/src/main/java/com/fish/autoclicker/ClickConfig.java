@@ -28,6 +28,10 @@ final class ClickConfig {
     float centerX;
     float centerY;
     float radius;
+    float fixedX;
+    float fixedY;
+    int overlayOpacityPercent;
+    int collapseDelaySeconds;
 
     static ClickConfig load(Context context) {
         SharedPreferences prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE);
@@ -46,6 +50,10 @@ final class ClickConfig {
         config.centerX = prefs.getFloat("centerX", 540f);
         config.centerY = prefs.getFloat("centerY", 900f);
         config.radius = prefs.getFloat("radius", 120f);
+        config.fixedX = prefs.getFloat("fixedX", 540f);
+        config.fixedY = prefs.getFloat("fixedY", 900f);
+        config.overlayOpacityPercent = prefs.getInt("overlayOpacityPercent", 88);
+        config.collapseDelaySeconds = prefs.getInt("collapseDelaySeconds", 6);
         config.normalize();
         return config;
     }
@@ -68,15 +76,19 @@ final class ClickConfig {
                 .putFloat("centerX", centerX)
                 .putFloat("centerY", centerY)
                 .putFloat("radius", radius)
+                .putFloat("fixedX", fixedX)
+                .putFloat("fixedY", fixedY)
+                .putInt("overlayOpacityPercent", overlayOpacityPercent)
+                .putInt("collapseDelaySeconds", collapseDelaySeconds)
                 .apply();
     }
 
     PointF nextPoint(Random random) {
         normalize();
+        if (!randomPoint) {
+            return new PointF(fixedX, fixedY);
+        }
         if (REGION_CIRCLE.equals(regionMode)) {
-            if (!randomPoint) {
-                return new PointF(centerX, centerY);
-            }
             double angle = random.nextDouble() * Math.PI * 2d;
             double distance = Math.sqrt(random.nextDouble()) * radius;
             return new PointF(
@@ -85,9 +97,6 @@ final class ClickConfig {
             );
         }
 
-        if (!randomPoint) {
-            return new PointF((left + right) / 2f, (top + bottom) / 2f);
-        }
         return new PointF(
                 left + random.nextFloat() * Math.max(1f, right - left),
                 top + random.nextFloat() * Math.max(1f, bottom - top)
@@ -113,9 +122,11 @@ final class ClickConfig {
     String describeRegion() {
         normalize();
         if (REGION_CIRCLE.equals(regionMode)) {
-            return String.format(Locale.CHINA, "圆形：中心 %.0f, %.0f，半径 %.0f", centerX, centerY, radius);
+            String range = String.format(Locale.CHINA, "圆形：中心 %.0f, %.0f，半径 %.0f", centerX, centerY, radius);
+            return randomPoint ? range : String.format(Locale.CHINA, "固定点：%.0f, %.0f", fixedX, fixedY);
         }
-        return String.format(Locale.CHINA, "矩形：%.0f, %.0f - %.0f, %.0f", left, top, right, bottom);
+        String range = String.format(Locale.CHINA, "矩形：%.0f, %.0f - %.0f, %.0f", left, top, right, bottom);
+        return randomPoint ? range : String.format(Locale.CHINA, "固定点：%.0f, %.0f", fixedX, fixedY);
     }
 
     private void normalize() {
@@ -134,6 +145,8 @@ final class ClickConfig {
         top = minY;
         bottom = Math.max(minY + 1f, maxY);
         radius = Math.max(1f, radius);
+        overlayOpacityPercent = Math.max(30, Math.min(100, overlayOpacityPercent));
+        collapseDelaySeconds = Math.max(3, Math.min(30, collapseDelaySeconds));
     }
 
     RectF rect() {

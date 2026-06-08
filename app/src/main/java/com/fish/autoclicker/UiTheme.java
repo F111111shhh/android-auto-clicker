@@ -4,9 +4,14 @@ import android.app.WallpaperColors;
 import android.app.WallpaperManager;
 import android.content.Context;
 import android.content.res.ColorStateList;
+import android.graphics.Canvas;
 import android.graphics.Color;
+import android.graphics.ColorFilter;
+import android.graphics.Paint;
+import android.graphics.Path;
+import android.graphics.PixelFormat;
+import android.graphics.RectF;
 import android.graphics.Typeface;
-import android.graphics.drawable.GradientDrawable;
 import android.graphics.drawable.RippleDrawable;
 import android.graphics.drawable.Drawable;
 import android.os.Build;
@@ -53,18 +58,11 @@ final class UiTheme {
     }
 
     Drawable rounded(int color, float radiusDp, Context context) {
-        GradientDrawable drawable = new GradientDrawable();
-        drawable.setColor(color);
-        drawable.setCornerRadius(dp(context, Math.round(radiusDp)));
-        return drawable;
+        return new SmoothDrawable(color, 0, 0, dp(context, Math.round(radiusDp)));
     }
 
     Drawable stroked(int color, int strokeColor, float radiusDp, Context context) {
-        GradientDrawable drawable = new GradientDrawable();
-        drawable.setColor(color);
-        drawable.setStroke(dp(context, 1), strokeColor);
-        drawable.setCornerRadius(dp(context, Math.round(radiusDp)));
-        return drawable;
+        return new SmoothDrawable(color, strokeColor, dp(context, 1), dp(context, Math.round(radiusDp)));
     }
 
     Drawable ripple(Drawable content, int rippleColor) {
@@ -112,6 +110,69 @@ final class UiTheme {
                 Math.round(Color.green(base) * keep + Color.green(overlay) * amount),
                 Math.round(Color.blue(base) * keep + Color.blue(overlay) * amount)
         );
+    }
+
+    private static final class SmoothDrawable extends Drawable {
+        private final Paint fillPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+        private final Paint strokePaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+        private final Path path = new Path();
+        private final RectF rect = new RectF();
+        private final int strokeWidth;
+        private final float radius;
+
+        SmoothDrawable(int fillColor, int strokeColor, int strokeWidth, float radius) {
+            this.strokeWidth = strokeWidth;
+            this.radius = radius;
+            fillPaint.setStyle(Paint.Style.FILL);
+            fillPaint.setColor(fillColor);
+            strokePaint.setStyle(Paint.Style.STROKE);
+            strokePaint.setStrokeWidth(strokeWidth);
+            strokePaint.setColor(strokeColor);
+        }
+
+        @Override
+        public void draw(Canvas canvas) {
+            float inset = strokeWidth > 0 ? strokeWidth / 2f : 0f;
+            rect.set(getBounds());
+            rect.inset(inset, inset);
+            buildContinuousRoundRect(rect, Math.min(radius, Math.min(rect.width(), rect.height()) / 2f), path);
+            canvas.drawPath(path, fillPaint);
+            if (strokeWidth > 0) {
+                canvas.drawPath(path, strokePaint);
+            }
+        }
+
+        @Override
+        public void setAlpha(int alpha) {
+            fillPaint.setAlpha(alpha);
+            strokePaint.setAlpha(alpha);
+        }
+
+        @Override
+        public void setColorFilter(ColorFilter colorFilter) {
+            fillPaint.setColorFilter(colorFilter);
+            strokePaint.setColorFilter(colorFilter);
+        }
+
+        @Override
+        public int getOpacity() {
+            return PixelFormat.TRANSLUCENT;
+        }
+
+        private static void buildContinuousRoundRect(RectF r, float radius, Path out) {
+            float smoothing = radius * 0.55f;
+            out.reset();
+            out.moveTo(r.left + radius, r.top);
+            out.lineTo(r.right - radius, r.top);
+            out.cubicTo(r.right - smoothing, r.top, r.right, r.top + smoothing, r.right, r.top + radius);
+            out.lineTo(r.right, r.bottom - radius);
+            out.cubicTo(r.right, r.bottom - smoothing, r.right - smoothing, r.bottom, r.right - radius, r.bottom);
+            out.lineTo(r.left + radius, r.bottom);
+            out.cubicTo(r.left + smoothing, r.bottom, r.left, r.bottom - smoothing, r.left, r.bottom - radius);
+            out.lineTo(r.left, r.top + radius);
+            out.cubicTo(r.left, r.top + smoothing, r.left + smoothing, r.top, r.left + radius, r.top);
+            out.close();
+        }
     }
 
     private static int resolveAccent(Context context) {
