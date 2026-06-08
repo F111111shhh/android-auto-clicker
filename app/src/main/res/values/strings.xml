@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">连点器</string>
+    <string name="accessibility_service_label">连点器点击服务</string>
+    <string name="accessibility_service_description">允许连点器按你的设置执行屏幕点击、暂停和停止操作。</string>
+</resources>

@@ -1,0 +1,54 @@
+plugins {
+    id "com.android.application"
+}
+
+def signingPropsFile = rootProject.file("keystore/signing.properties")
+def signingProps = new Properties()
+if (signingPropsFile.exists()) {
+    signingProps.load(new FileInputStream(signingPropsFile))
+}
+
+def signingValue = { name ->
+    def value = signingProps.getProperty(name)
+    if (value != null) {
+        return value
+    }
+    def match = signingProps.find { entry ->
+        entry.key.toString().endsWith(name)
+    }
+    return match == null ? null : match.value
+}
+
+android {
+    namespace "com.fish.autoclicker"
+    compileSdk 35
+
+    defaultConfig {
+        applicationId "com.fish.autoclicker"
+        minSdk 26
+        targetSdk 35
+        versionCode 1
+        versionName "1.0.0"
+    }
+
+    signingConfigs {
+        release {
+            if (signingPropsFile.exists()) {
+                storeFile rootProject.file(signingValue("storeFile"))
+                storePassword signingValue("storePassword")
+                keyAlias signingValue("keyAlias")
+                keyPassword signingValue("keyPassword")
+            }
+        }
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+            shrinkResources false
+            if (signingPropsFile.exists()) {
+                signingConfig signingConfigs.release
+            }
+        }
+    }
+}
