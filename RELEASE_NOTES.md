@@ -1,3 +1,9 @@
+# v1.0.3
+
+UI 细节修正：
+
+- 将上一版手写连续圆角替换为 superellipse/squircle 曲线，更接近 iOS/Figma 的平滑圆角。
+
 # v1.0.2
 
 交互与逻辑改进：
@@ -32,4 +38,4 @@
 - 支持悬浮控制面板和全屏范围选择层。
 - 使用 Android 辅助功能服务执行点击。
 
-APK 文件：`lian-dian-qi-v1.0.2-release.apk`
+APK 文件：`lian-dian-qi-v1.0.3-release.apk`

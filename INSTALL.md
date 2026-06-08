@@ -3,7 +3,7 @@
 APK 文件在项目根目录：
 
 ```text
-lian-dian-qi-v1.0.2-release.apk
+lian-dian-qi-v1.0.3-release.apk
 ```
 
 安装后第一次打开：

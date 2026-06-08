@@ -160,18 +160,36 @@ final class UiTheme {
         }
 
         private static void buildContinuousRoundRect(RectF r, float radius, Path out) {
-            float smoothing = radius * 0.55f;
             out.reset();
             out.moveTo(r.left + radius, r.top);
             out.lineTo(r.right - radius, r.top);
-            out.cubicTo(r.right - smoothing, r.top, r.right, r.top + smoothing, r.right, r.top + radius);
+            appendSuperellipseCorner(out, r.right - radius, r.top + radius, radius, -Math.PI / 2d, 0d);
             out.lineTo(r.right, r.bottom - radius);
-            out.cubicTo(r.right, r.bottom - smoothing, r.right - smoothing, r.bottom, r.right - radius, r.bottom);
+            appendSuperellipseCorner(out, r.right - radius, r.bottom - radius, radius, 0d, Math.PI / 2d);
             out.lineTo(r.left + radius, r.bottom);
-            out.cubicTo(r.left + smoothing, r.bottom, r.left, r.bottom - smoothing, r.left, r.bottom - radius);
+            appendSuperellipseCorner(out, r.left + radius, r.bottom - radius, radius, Math.PI / 2d, Math.PI);
             out.lineTo(r.left, r.top + radius);
-            out.cubicTo(r.left, r.top + smoothing, r.left + smoothing, r.top, r.left + radius, r.top);
+            appendSuperellipseCorner(out, r.left + radius, r.top + radius, radius, Math.PI, Math.PI * 1.5d);
             out.close();
+        }
+
+        private static void appendSuperellipseCorner(Path out, float centerX, float centerY,
+                                                     float radius, double start, double end) {
+            double exponent = 4.6d;
+            int steps = Math.max(8, Math.min(18, Math.round(radius / 3f)));
+            for (int i = 1; i <= steps; i++) {
+                double t = start + (end - start) * i / steps;
+                double cos = Math.cos(t);
+                double sin = Math.sin(t);
+                float x = centerX + signedPow(cos, 2d / exponent) * radius;
+                float y = centerY + signedPow(sin, 2d / exponent) * radius;
+                out.lineTo(x, y);
+            }
+        }
+
+        private static float signedPow(double value, double power) {
+            double magnitude = Math.pow(Math.abs(value), power);
+            return (float) (value < 0d ? -magnitude : magnitude);
         }
     }
 
