@@ -1,8 +1,8 @@
 $ErrorActionPreference = "Stop"
 
 $repo = "android-auto-clicker"
-$tag = "v1.0.0"
-$apk = Join-Path $PSScriptRoot "lian-dian-qi-v1.0.0-release.apk"
+$tag = "v1.0.1"
+$apk = Join-Path $PSScriptRoot "lian-dian-qi-v1.0.1-release.apk"
 
 if (!(Get-Command gh -ErrorAction SilentlyContinue)) {
     throw "GitHub CLI is not installed."

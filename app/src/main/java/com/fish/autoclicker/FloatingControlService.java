@@ -13,7 +13,6 @@ import android.content.pm.ServiceInfo;
 import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.Paint;
-import android.graphics.Point;
 import android.graphics.RectF;
 import android.os.Build;
 import android.os.IBinder;
@@ -39,6 +38,7 @@ public class FloatingControlService extends Service {
     private TextView statusText;
     private Button pauseButton;
     private ClickConfig config;
+    private UiTheme theme;
 
     private final BroadcastReceiver stateReceiver = new BroadcastReceiver() {
         @Override
@@ -50,6 +50,7 @@ public class FloatingControlService extends Service {
     @Override
     public void onCreate() {
         super.onCreate();
+        theme = UiTheme.from(this);
         windowManager = (WindowManager) getSystemService(WINDOW_SERVICE);
         config = ClickConfig.load(this);
         Notification notification = buildNotification();
@@ -95,21 +96,23 @@ public class FloatingControlService extends Service {
 
         LinearLayout root = new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
-        root.setPadding(dp(10), dp(10), dp(10), dp(10));
-        root.setBackgroundResource(com.fish.autoclicker.R.drawable.bg_panel);
+        root.setPadding(dp(12), dp(12), dp(12), dp(12));
+        root.setBackground(theme.stroked(theme.surface, theme.outline, 22, this));
+        root.setElevation(dp(10));
 
         statusText = new TextView(this);
-        statusText.setTextColor(Color.rgb(15, 23, 42));
+        statusText.setTextColor(theme.text);
         statusText.setTextSize(13);
-        statusText.setMaxWidth(dp(220));
+        statusText.setMaxWidth(dp(238));
+        statusText.setLineSpacing(dp(2), 1f);
         root.addView(statusText);
 
         LinearLayout row1 = new LinearLayout(this);
         row1.setOrientation(LinearLayout.HORIZONTAL);
-        row1.setPadding(0, dp(8), 0, 0);
-        Button start = button("开始");
-        pauseButton = button("暂停");
-        Button stop = button("停止");
+        row1.setPadding(0, dp(9), 0, 0);
+        Button start = primaryButton("开始");
+        pauseButton = tonalButton("暂停");
+        Button stop = dangerButton("停止");
         row1.addView(start, buttonParams());
         row1.addView(pauseButton, buttonParams());
         row1.addView(stop, buttonParams());
@@ -117,10 +120,10 @@ public class FloatingControlService extends Service {
 
         LinearLayout row2 = new LinearLayout(this);
         row2.setOrientation(LinearLayout.HORIZONTAL);
-        row2.setPadding(0, dp(6), 0, 0);
-        Button select = button("选区");
-        Button settings = button("设置");
-        Button close = button("关闭");
+        row2.setPadding(0, dp(7), 0, 0);
+        Button select = tonalButton("选区");
+        Button settings = tonalButton("设置");
+        Button close = quietButton("关闭");
         row2.addView(select, buttonParams());
         row2.addView(settings, buttonParams());
         row2.addView(close, buttonParams());
@@ -134,8 +137,7 @@ public class FloatingControlService extends Service {
         params.x = dp(20);
         params.y = dp(120);
 
-        DragTouchListener drag = new DragTouchListener(params);
-        root.setOnTouchListener(drag);
+        root.setOnTouchListener(new DragTouchListener(params));
         windowManager.addView(root, params);
         panelView = root;
 
@@ -143,7 +145,7 @@ public class FloatingControlService extends Service {
             @Override
             public void onClick(View v) {
                 config = ClickConfig.load(FloatingControlService.this);
-                if (ClickAccessibilityService.instance() == null) {
+                if (!PermissionUtils.isAccessibilityEnabled(FloatingControlService.this)) {
                     Toast.makeText(FloatingControlService.this, "请先开启辅助功能服务", Toast.LENGTH_LONG).show();
                     openAccessibilitySettings();
                     return;
@@ -223,16 +225,45 @@ public class FloatingControlService extends Service {
         }
     }
 
-    private Button button(String text) {
+    private Button baseButton(String text) {
         Button button = new Button(this);
         button.setText(text);
         button.setTextSize(13);
-        button.setTextColor(Color.WHITE);
+        button.setTypeface(android.graphics.Typeface.DEFAULT, android.graphics.Typeface.BOLD);
         button.setAllCaps(false);
         button.setMinWidth(0);
         button.setMinimumWidth(0);
+        button.setMinHeight(0);
+        button.setMinimumHeight(0);
         button.setPadding(dp(8), 0, dp(8), 0);
-        button.setBackgroundResource(com.fish.autoclicker.R.drawable.bg_button);
+        return button;
+    }
+
+    private Button primaryButton(String text) {
+        Button button = baseButton(text);
+        button.setTextColor(theme.onAccent());
+        button.setBackground(theme.ripple(theme.rounded(theme.accent, 16, this), theme.accentStrong));
+        return button;
+    }
+
+    private Button tonalButton(String text) {
+        Button button = baseButton(text);
+        button.setTextColor(theme.accentStrong);
+        button.setBackground(theme.ripple(theme.rounded(theme.accentSoft, 16, this), theme.accent));
+        return button;
+    }
+
+    private Button dangerButton(String text) {
+        Button button = baseButton(text);
+        button.setTextColor(Color.WHITE);
+        button.setBackground(theme.ripple(theme.rounded(theme.danger, 16, this), theme.danger));
+        return button;
+    }
+
+    private Button quietButton(String text) {
+        Button button = baseButton(text);
+        button.setTextColor(theme.text);
+        button.setBackground(theme.ripple(theme.stroked(theme.surfaceHigh, theme.outline, 16, this), theme.accent));
         return button;
     }
 
@@ -321,7 +352,7 @@ public class FloatingControlService extends Service {
     }
 
     private int dp(int value) {
-        return Math.round(value * getResources().getDisplayMetrics().density);
+        return UiTheme.dp(this, value);
     }
 
     private final class DragTouchListener implements View.OnTouchListener {
@@ -343,7 +374,7 @@ public class FloatingControlService extends Service {
                     startY = params.y;
                     touchX = event.getRawX();
                     touchY = event.getRawY();
-                    return false;
+                    return true;
                 case MotionEvent.ACTION_MOVE:
                     params.x = startX + Math.round(event.getRawX() - touchX);
                     params.y = startY + Math.round(event.getRawY() - touchY);
@@ -372,14 +403,14 @@ public class FloatingControlService extends Service {
             super(context);
             this.draft = config;
             this.circleMode = ClickConfig.REGION_CIRCLE.equals(config.regionMode);
-            dimPaint.setColor(Color.argb(120, 15, 23, 42));
+            dimPaint.setColor(Color.argb(128, 15, 23, 42));
             shapePaint.setStyle(Paint.Style.STROKE);
             shapePaint.setStrokeWidth(dp(3));
-            shapePaint.setColor(Color.rgb(56, 189, 248));
-            handlePaint.setColor(Color.rgb(37, 99, 235));
+            shapePaint.setColor(theme.accentSoft);
+            handlePaint.setColor(theme.accent);
             textPaint.setColor(Color.WHITE);
             textPaint.setTextSize(dp(15));
-            textPaint.setFakeBoldText(true);
+            textPaint.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
             setBackgroundColor(Color.TRANSPARENT);
         }
 
@@ -402,6 +433,7 @@ public class FloatingControlService extends Service {
             drawButton(canvas, 0, "保存");
             drawButton(canvas, 1, circleMode ? "矩形" : "圆形");
             drawButton(canvas, 2, "取消");
+            textPaint.setColor(Color.WHITE);
             canvas.drawText("拖动屏幕选择范围，底部按钮可保存或切换形状", dp(16), dp(34), textPaint);
         }
 
@@ -530,9 +562,11 @@ public class FloatingControlService extends Service {
             float left = (getWidth() - total) / 2f + index * (width + gap);
             float top = getHeight() - dp(70);
             Paint buttonPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
-            buttonPaint.setColor(Color.rgb(37, 99, 235));
+            boolean cancel = index == 2;
+            buttonPaint.setColor(cancel ? UiTheme.withAlpha(Color.WHITE, 238) : theme.accent);
             RectF button = new RectF(left, top, left + width, top + height);
-            canvas.drawRoundRect(button, dp(8), dp(8), buttonPaint);
+            canvas.drawRoundRect(button, dp(18), dp(18), buttonPaint);
+            textPaint.setColor(cancel ? theme.text : theme.onAccent());
             Paint.FontMetrics metrics = textPaint.getFontMetrics();
             float textX = left + (width - textPaint.measureText(text)) / 2f;
             float textY = top + (height - metrics.bottom + metrics.top) / 2f - metrics.top;

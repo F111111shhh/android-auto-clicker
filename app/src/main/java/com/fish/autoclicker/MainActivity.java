@@ -5,23 +5,28 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
 import android.graphics.Color;
-import android.net.Uri;
+import android.graphics.Typeface;
 import android.os.Build;
 import android.os.Bundle;
 import android.provider.Settings;
+import android.text.InputType;
 import android.text.TextUtils;
 import android.view.Gravity;
 import android.view.View;
 import android.widget.Button;
-import android.widget.CheckBox;
+import android.widget.CompoundButton;
 import android.widget.EditText;
 import android.widget.LinearLayout;
-import android.widget.RadioGroup;
 import android.widget.ScrollView;
+import android.widget.Switch;
 import android.widget.TextView;
 import android.widget.Toast;
 
 public class MainActivity extends android.app.Activity {
+    private static final int MODE_RECT_ID = 1001;
+    private static final int MODE_CIRCLE_ID = 1002;
+
+    private UiTheme theme;
     private EditText countInput;
     private EditText intervalInput;
     private EditText jitterInput;
@@ -32,12 +37,20 @@ public class MainActivity extends android.app.Activity {
     private EditText centerXInput;
     private EditText centerYInput;
     private EditText radiusInput;
-    private CheckBox infiniteCheck;
-    private CheckBox randomPointCheck;
-    private CheckBox randomIntervalCheck;
-    private RadioGroup regionGroup;
-    private TextView statusText;
+    private CompoundButton infiniteSwitch;
+    private CompoundButton randomPointSwitch;
+    private CompoundButton randomIntervalSwitch;
+    private TextView statusTitle;
+    private TextView statusBody;
+    private TextView accessibilityChip;
+    private TextView overlayChip;
+    private TextView rectSegment;
+    private TextView circleSegment;
+    private LinearLayout rectFields;
+    private LinearLayout circleFields;
     private ClickConfig config;
+    private String regionMode = ClickConfig.REGION_RECT;
+    private boolean receiverRegistered;
 
     private final BroadcastReceiver stateReceiver = new BroadcastReceiver() {
         @Override
@@ -49,7 +62,10 @@ public class MainActivity extends android.app.Activity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        theme = UiTheme.from(this);
+        theme.styleSystemBars(this);
         config = ClickConfig.load(this);
+        regionMode = config.regionMode;
         setContentView(buildContent());
         fillForm(config);
     }
@@ -58,77 +74,189 @@ public class MainActivity extends android.app.Activity {
     protected void onResume() {
         super.onResume();
         registerReceiverCompat();
+        config = ClickConfig.load(this);
+        fillForm(config);
         updateStatus(null);
     }
 
     @Override
     protected void onPause() {
         super.onPause();
-        unregisterReceiver(stateReceiver);
+        if (receiverRegistered) {
+            unregisterReceiver(stateReceiver);
+            receiverRegistered = false;
+        }
         saveFromForm();
     }
 
     private View buildContent() {
         ScrollView scroll = new ScrollView(this);
+        scroll.setFillViewport(false);
+        scroll.setBackgroundColor(theme.background);
+
         LinearLayout root = new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
-        root.setPadding(dp(18), dp(18), dp(18), dp(28));
-        root.setBackgroundColor(Color.rgb(248, 250, 252));
-        scroll.addView(root);
+        root.setPadding(dp(20), dp(20), dp(20), dp(30));
+        scroll.addView(root, matchWrap());
 
+        root.addView(header());
+        root.addView(statusCard(), topMargin(16));
+        root.addView(planCard(), topMargin(16));
+        root.addView(rhythmCard(), topMargin(14));
+        root.addView(regionCard(), topMargin(14));
+        root.addView(actionPanel(), topMargin(18));
+
+        return scroll;
+    }
+
+    private View header() {
+        LinearLayout row = new LinearLayout(this);
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        row.setGravity(Gravity.CENTER_VERTICAL);
+
+        LinearLayout titles = new LinearLayout(this);
+        titles.setOrientation(LinearLayout.VERTICAL);
         TextView title = new TextView(this);
         title.setText("连点器");
-        title.setTextSize(26);
-        title.setTextColor(Color.rgb(15, 23, 42));
-        title.setGravity(Gravity.CENTER_VERTICAL);
-        title.setPadding(0, 0, 0, dp(10));
-        root.addView(title);
+        theme.title(title, 32);
+        TextView subtitle = new TextView(this);
+        subtitle.setText("自动点击 · 悬浮控制");
+        theme.body(subtitle, 13);
+        subtitle.setPadding(0, dp(6), 0, 0);
+        titles.addView(title);
+        titles.addView(subtitle);
+        row.addView(titles, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
 
-        statusText = new TextView(this);
-        statusText.setTextColor(Color.rgb(3, 105, 161));
-        statusText.setTextSize(14);
-        statusText.setPadding(dp(12), dp(10), dp(12), dp(10));
-        statusText.setBackgroundResource(com.fish.autoclicker.R.drawable.bg_status);
-        root.addView(statusText, matchWrap());
+        Button permission = pillButton("权限");
+        permission.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                startActivity(new Intent(MainActivity.this, PermissionActivity.class));
+            }
+        });
+        row.addView(permission, new LinearLayout.LayoutParams(dp(82), dp(42)));
+        return row;
+    }
 
-        root.addView(section("点击次数"));
-        infiniteCheck = checkBox("无限点击，手动停止");
-        root.addView(infiniteCheck);
-        countInput = input("固定次数，例如 100");
-        root.addView(countInput, matchWrap());
+    private View statusCard() {
+        LinearLayout card = card(theme.accentContainer);
+        LinearLayout top = new LinearLayout(this);
+        top.setOrientation(LinearLayout.HORIZONTAL);
+        top.setGravity(Gravity.CENTER_VERTICAL);
 
-        root.addView(section("点击频率"));
-        intervalInput = input("点击间隔毫秒，例如 200");
-        root.addView(intervalInput, matchWrap());
-        randomIntervalCheck = checkBox("不按完全相同间隔点击");
-        root.addView(randomIntervalCheck);
-        jitterInput = input("时间浮动百分比，例如 30");
-        root.addView(jitterInput, matchWrap());
+        statusTitle = new TextView(this);
+        statusTitle.setText("待开始");
+        statusTitle.setTextColor(theme.accentStrong);
+        statusTitle.setTextSize(17);
+        statusTitle.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
+        top.addView(statusTitle, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
 
-        root.addView(section("点击范围"));
-        regionGroup = new RadioGroup(this);
-        regionGroup.setOrientation(RadioGroup.HORIZONTAL);
-        android.widget.RadioButton rect = radio("矩形范围", 1001);
-        android.widget.RadioButton circle = radio("中心点半径", 1002);
-        regionGroup.addView(rect);
-        regionGroup.addView(circle);
-        root.addView(regionGroup);
-        randomPointCheck = checkBox("在指定区域随机点击");
-        root.addView(randomPointCheck);
+        LinearLayout chips = new LinearLayout(this);
+        chips.setOrientation(LinearLayout.HORIZONTAL);
+        accessibilityChip = chip("辅助功能", false);
+        overlayChip = chip("悬浮窗", false);
+        chips.addView(accessibilityChip);
+        LinearLayout.LayoutParams chipGap = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.WRAP_CONTENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+        );
+        chipGap.setMargins(dp(8), 0, 0, 0);
+        chips.addView(overlayChip, chipGap);
+        top.addView(chips);
+        card.addView(top);
 
-        leftInput = input("矩形左 X");
-        topInput = input("矩形上 Y");
-        rightInput = input("矩形右 X");
-        bottomInput = input("矩形下 Y");
-        centerXInput = input("中心 X");
-        centerYInput = input("中心 Y");
-        radiusInput = input("半径");
-        root.addView(twoColumns(leftInput, topInput));
-        root.addView(twoColumns(rightInput, bottomInput));
-        root.addView(twoColumns(centerXInput, centerYInput));
-        root.addView(radiusInput, matchWrap());
+        statusBody = new TextView(this);
+        statusBody.setTextColor(theme.text);
+        statusBody.setTextSize(14);
+        statusBody.setLineSpacing(dp(2), 1f);
+        statusBody.setPadding(0, dp(12), 0, 0);
+        card.addView(statusBody);
+        return card;
+    }
 
-        Button save = primaryButton("保存设置");
+    private View planCard() {
+        LinearLayout card = sectionCard("点击计划", "设置总次数，或保持运行直到手动停止。");
+        infiniteSwitch = switchRow(card, "无限点击", "开启后忽略固定次数");
+        countInput = numberInput("固定次数", "100");
+        card.addView(inputBlock(countInput));
+        return card;
+    }
+
+    private View rhythmCard() {
+        LinearLayout card = sectionCard("点击节奏", "控制点击间隔和时间浮动。");
+        intervalInput = numberInput("点击间隔", "200 ms");
+        jitterInput = numberInput("随机浮动", "30%");
+        card.addView(twoColumnInputs(intervalInput, jitterInput));
+        randomIntervalSwitch = switchRow(card, "不等间隔", "在基础间隔上下随机浮动");
+        return card;
+    }
+
+    private View regionCard() {
+        LinearLayout card = sectionCard("点击范围", "选择坐标形状，也可以直接用悬浮层拖选。");
+
+        LinearLayout segmentRow = new LinearLayout(this);
+        segmentRow.setOrientation(LinearLayout.HORIZONTAL);
+        segmentRow.setPadding(0, dp(12), 0, 0);
+        rectSegment = segment("矩形范围", MODE_RECT_ID);
+        circleSegment = segment("中心点半径", MODE_CIRCLE_ID);
+        segmentRow.addView(rectSegment, new LinearLayout.LayoutParams(0, dp(46), 1f));
+        LinearLayout.LayoutParams circleParams = new LinearLayout.LayoutParams(0, dp(46), 1f);
+        circleParams.setMargins(dp(8), 0, 0, 0);
+        segmentRow.addView(circleSegment, circleParams);
+        card.addView(segmentRow);
+
+        randomPointSwitch = switchRow(card, "区域内随机点击", "关闭时点击范围中心点");
+
+        leftInput = numberInput("左 X", "300");
+        topInput = numberInput("上 Y", "600");
+        rightInput = numberInput("右 X", "700");
+        bottomInput = numberInput("下 Y", "1000");
+        centerXInput = numberInput("中心 X", "540");
+        centerYInput = numberInput("中心 Y", "900");
+        radiusInput = numberInput("半径", "120");
+
+        rectFields = new LinearLayout(this);
+        rectFields.setOrientation(LinearLayout.VERTICAL);
+        rectFields.addView(twoColumnInputs(leftInput, topInput));
+        rectFields.addView(twoColumnInputs(rightInput, bottomInput));
+        card.addView(rectFields);
+
+        circleFields = new LinearLayout(this);
+        circleFields.setOrientation(LinearLayout.VERTICAL);
+        circleFields.addView(twoColumnInputs(centerXInput, centerYInput));
+        circleFields.addView(inputBlock(radiusInput));
+        card.addView(circleFields);
+
+        Button selectRegion = tonalButton("打开悬浮窗并选择范围");
+        selectRegion.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                saveFromForm();
+                ensureOverlayThenStart(true);
+            }
+        });
+        card.addView(selectRegion, topMargin(12, LinearLayout.LayoutParams.MATCH_PARENT, dp(52)));
+        return card;
+    }
+
+    private View actionPanel() {
+        LinearLayout panel = new LinearLayout(this);
+        panel.setOrientation(LinearLayout.VERTICAL);
+
+        Button openFloating = primaryButton("打开悬浮控制");
+        openFloating.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                saveFromForm();
+                ensureOverlayThenStart(false);
+            }
+        });
+        panel.addView(openFloating, new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                dp(58)
+        ));
+
+        Button save = tonalButton("保存设置");
         save.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
@@ -137,57 +265,30 @@ public class MainActivity extends android.app.Activity {
                 updateStatus("已保存设置");
             }
         });
-        root.addView(save, matchWrapWithTop());
+        panel.addView(save, topMargin(10, LinearLayout.LayoutParams.MATCH_PARENT, dp(54)));
 
-        Button chooseRegion = secondaryButton("打开悬浮窗并选择范围");
-        chooseRegion.setOnClickListener(new View.OnClickListener() {
+        Button permissions = quietButton("权限与系统设置");
+        permissions.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
-                saveFromForm();
-                ensureOverlayThenStart(true);
+                startActivity(new Intent(MainActivity.this, PermissionActivity.class));
             }
         });
-        root.addView(chooseRegion, matchWrapWithTop());
-
-        Button startFloating = primaryButton("打开悬浮控制");
-        startFloating.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View v) {
-                saveFromForm();
-                ensureOverlayThenStart(false);
-            }
-        });
-        root.addView(startFloating, matchWrapWithTop());
-
-        Button accessibility = secondaryButton("开启辅助功能权限");
-        accessibility.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View v) {
-                startActivity(new Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS));
-            }
-        });
-        root.addView(accessibility, matchWrapWithTop());
-
-        Button overlay = secondaryButton("开启悬浮窗权限");
-        overlay.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View v) {
-                openOverlaySettings();
-            }
-        });
-        root.addView(overlay, matchWrapWithTop());
-
-        return scroll;
+        panel.addView(permissions, topMargin(10, LinearLayout.LayoutParams.MATCH_PARENT, dp(50)));
+        return panel;
     }
 
     private void fillForm(ClickConfig c) {
-        infiniteCheck.setChecked(c.infinite);
+        if (c == null || countInput == null) {
+            return;
+        }
+        regionMode = c.regionMode;
+        infiniteSwitch.setChecked(c.infinite);
         countInput.setText(String.valueOf(c.clickCount));
         intervalInput.setText(String.valueOf(c.intervalMs));
-        randomPointCheck.setChecked(c.randomPoint);
-        randomIntervalCheck.setChecked(c.randomInterval);
+        randomPointSwitch.setChecked(c.randomPoint);
+        randomIntervalSwitch.setChecked(c.randomInterval);
         jitterInput.setText(String.valueOf(c.intervalJitterPercent));
-        regionGroup.check(ClickConfig.REGION_CIRCLE.equals(c.regionMode) ? 1002 : 1001);
         leftInput.setText(String.valueOf(Math.round(c.left)));
         topInput.setText(String.valueOf(Math.round(c.top)));
         rightInput.setText(String.valueOf(Math.round(c.right)));
@@ -195,21 +296,20 @@ public class MainActivity extends android.app.Activity {
         centerXInput.setText(String.valueOf(Math.round(c.centerX)));
         centerYInput.setText(String.valueOf(Math.round(c.centerY)));
         radiusInput.setText(String.valueOf(Math.round(c.radius)));
+        refreshRegionMode();
     }
 
     private void saveFromForm() {
         if (config == null) {
             config = ClickConfig.load(this);
         }
-        config.infinite = infiniteCheck.isChecked();
+        config.infinite = infiniteSwitch.isChecked();
         config.clickCount = readInt(countInput, 100);
         config.intervalMs = readInt(intervalInput, 200);
-        config.randomPoint = randomPointCheck.isChecked();
-        config.randomInterval = randomIntervalCheck.isChecked();
+        config.randomPoint = randomPointSwitch.isChecked();
+        config.randomInterval = randomIntervalSwitch.isChecked();
         config.intervalJitterPercent = readInt(jitterInput, 30);
-        config.regionMode = regionGroup.getCheckedRadioButtonId() == 1002
-                ? ClickConfig.REGION_CIRCLE
-                : ClickConfig.REGION_RECT;
+        config.regionMode = regionMode;
         config.left = readFloat(leftInput, 300f);
         config.top = readFloat(topInput, 600f);
         config.right = readFloat(rightInput, 700f);
@@ -221,9 +321,9 @@ public class MainActivity extends android.app.Activity {
     }
 
     private void ensureOverlayThenStart(boolean selectRegion) {
-        if (!Settings.canDrawOverlays(this)) {
+        if (!PermissionUtils.isOverlayAllowed(this)) {
             Toast.makeText(this, "请先开启悬浮窗权限", Toast.LENGTH_LONG).show();
-            openOverlaySettings();
+            startActivity(new Intent(this, PermissionActivity.class));
             return;
         }
         Intent intent = new Intent(this, FloatingControlService.class);
@@ -236,102 +336,245 @@ public class MainActivity extends android.app.Activity {
         moveTaskToBack(true);
     }
 
-    private void openOverlaySettings() {
-        Intent intent = new Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
-                Uri.parse("package:" + getPackageName()));
-        startActivity(intent);
-    }
-
     private void updateStatus(String message) {
         ClickController controller = ClickController.get();
-        StringBuilder builder = new StringBuilder();
-        if (!TextUtils.isEmpty(message)) {
-            builder.append(message).append("  ");
-        }
-        builder.append("辅助功能：")
-                .append(ClickAccessibilityService.instance() == null ? "未开启" : "已开启")
-                .append("  悬浮窗：")
-                .append(Settings.canDrawOverlays(this) ? "已允许" : "未允许");
+        boolean accessibility = PermissionUtils.isAccessibilityEnabled(this);
+        boolean overlay = PermissionUtils.isOverlayAllowed(this);
+
+        setChip(accessibilityChip, "辅助功能", accessibility);
+        setChip(overlayChip, "悬浮窗", overlay);
+
+        String title = TextUtils.isEmpty(message) ? "待开始" : message;
         if (controller.isRunning()) {
-            builder.append("  进度：")
+            title = controller.isPaused() ? "已暂停" : "点击中";
+        }
+        statusTitle.setText(title);
+
+        StringBuilder builder = new StringBuilder();
+        if (controller.isRunning()) {
+            builder.append("进度 ")
                     .append(controller.completed())
                     .append("/")
                     .append(controller.total() == Integer.MAX_VALUE ? "无限" : controller.total())
-                    .append(controller.isPaused() ? "，已暂停" : "，点击中");
+                    .append("\n");
         }
         if (config != null) {
-            builder.append("\n").append(config.describeRegion());
+            builder.append(config.describeRegion());
         }
-        statusText.setText(builder.toString());
+        statusBody.setText(builder.toString());
     }
 
-    private TextView section(String text) {
-        TextView view = new TextView(this);
-        view.setText(text);
-        view.setTextSize(17);
-        view.setTextColor(Color.rgb(15, 23, 42));
-        view.setPadding(0, dp(18), 0, dp(8));
-        return view;
+    private LinearLayout sectionCard(String title, String subtitle) {
+        LinearLayout card = card(theme.surface);
+        TextView titleView = new TextView(this);
+        theme.title(titleView, 18);
+        titleView.setText(title);
+        card.addView(titleView);
+
+        TextView subtitleView = new TextView(this);
+        theme.body(subtitleView, 13);
+        subtitleView.setText(subtitle);
+        subtitleView.setPadding(0, dp(7), 0, 0);
+        card.addView(subtitleView);
+        return card;
     }
 
-    private EditText input(String hint) {
+    private LinearLayout card(int color) {
+        LinearLayout card = new LinearLayout(this);
+        card.setOrientation(LinearLayout.VERTICAL);
+        card.setPadding(dp(16), dp(16), dp(16), dp(16));
+        card.setBackground(theme.stroked(color, theme.outline, 24, this));
+        return card;
+    }
+
+    private CompoundButton switchRow(LinearLayout parent, String title, String subtitle) {
+        LinearLayout row = new LinearLayout(this);
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        row.setGravity(Gravity.CENTER_VERTICAL);
+        row.setPadding(0, dp(12), 0, dp(2));
+
+        LinearLayout textBox = new LinearLayout(this);
+        textBox.setOrientation(LinearLayout.VERTICAL);
+        TextView titleView = new TextView(this);
+        titleView.setText(title);
+        titleView.setTextColor(theme.text);
+        titleView.setTextSize(16);
+        titleView.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
+        TextView subtitleView = new TextView(this);
+        subtitleView.setText(subtitle);
+        theme.body(subtitleView, 12);
+        subtitleView.setPadding(0, dp(4), 0, 0);
+        textBox.addView(titleView);
+        textBox.addView(subtitleView);
+        row.addView(textBox, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
+
+        Switch control = new Switch(this);
+        tintSwitch(control);
+        row.addView(control);
+        parent.addView(row);
+        return control;
+    }
+
+    private EditText numberInput(String label, String hint) {
         EditText editText = new EditText(this);
+        editText.setTag(label);
         editText.setSingleLine(true);
-        editText.setTextSize(15);
+        editText.setTextSize(18);
+        editText.setTextColor(theme.text);
         editText.setHint(hint);
-        editText.setInputType(android.text.InputType.TYPE_CLASS_NUMBER
-                | android.text.InputType.TYPE_NUMBER_FLAG_DECIMAL);
-        editText.setPadding(dp(10), 0, dp(10), 0);
+        editText.setHintTextColor(theme.subtext);
+        editText.setSelectAllOnFocus(true);
+        editText.setInputType(InputType.TYPE_CLASS_NUMBER | InputType.TYPE_NUMBER_FLAG_DECIMAL);
+        editText.setPadding(dp(14), 0, dp(14), 0);
+        editText.setBackground(theme.stroked(theme.field, theme.outline, 16, this));
         return editText;
     }
 
-    private CheckBox checkBox(String text) {
-        CheckBox checkBox = new CheckBox(this);
-        checkBox.setText(text);
-        checkBox.setTextSize(15);
-        checkBox.setTextColor(Color.rgb(30, 41, 59));
-        return checkBox;
+    private View inputBlock(EditText input) {
+        LinearLayout block = new LinearLayout(this);
+        block.setOrientation(LinearLayout.VERTICAL);
+        block.setPadding(0, dp(12), 0, 0);
+
+        TextView label = new TextView(this);
+        label.setText(String.valueOf(input.getTag()));
+        label.setTextColor(theme.subtext);
+        label.setTextSize(12);
+        label.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
+        label.setPadding(dp(2), 0, 0, dp(6));
+        block.addView(label);
+        block.addView(input, new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                dp(54)
+        ));
+        return block;
     }
 
-    private android.widget.RadioButton radio(String text, int id) {
-        android.widget.RadioButton button = new android.widget.RadioButton(this);
-        button.setId(id);
-        button.setText(text);
-        button.setTextSize(15);
-        button.setTextColor(Color.rgb(30, 41, 59));
-        return button;
+    private View twoColumnInputs(EditText left, EditText right) {
+        LinearLayout row = new LinearLayout(this);
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        row.addView(inputBlock(left), new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
+        LinearLayout.LayoutParams rightParams = new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f);
+        rightParams.setMargins(dp(10), 0, 0, 0);
+        row.addView(inputBlock(right), rightParams);
+        return row;
+    }
+
+    private TextView segment(String text, int id) {
+        TextView view = new TextView(this);
+        view.setId(id);
+        view.setText(text);
+        view.setGravity(Gravity.CENTER);
+        view.setTextSize(15);
+        view.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
+        view.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                regionMode = v.getId() == MODE_CIRCLE_ID ? ClickConfig.REGION_CIRCLE : ClickConfig.REGION_RECT;
+                refreshRegionMode();
+            }
+        });
+        return view;
+    }
+
+    private void refreshRegionMode() {
+        boolean circle = ClickConfig.REGION_CIRCLE.equals(regionMode);
+        styleSegment(rectSegment, !circle);
+        styleSegment(circleSegment, circle);
+        rectFields.setVisibility(circle ? View.GONE : View.VISIBLE);
+        circleFields.setVisibility(circle ? View.VISIBLE : View.GONE);
+    }
+
+    private void styleSegment(TextView view, boolean selected) {
+        if (view == null) {
+            return;
+        }
+        int bg = selected ? theme.accent : theme.surfaceHigh;
+        int text = selected ? theme.onAccent() : theme.text;
+        view.setTextColor(text);
+        view.setBackground(theme.ripple(theme.stroked(bg, selected ? theme.accent : theme.outline, 18, this), theme.accent));
+    }
+
+    private TextView chip(String text, boolean active) {
+        TextView chip = new TextView(this);
+        chip.setGravity(Gravity.CENTER);
+        chip.setTextSize(12);
+        chip.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
+        chip.setPadding(dp(10), dp(6), dp(10), dp(6));
+        setChip(chip, text, active);
+        return chip;
+    }
+
+    private void setChip(TextView chip, String label, boolean active) {
+        if (chip == null) {
+            return;
+        }
+        chip.setText(label + (active ? " 已开" : " 未开"));
+        chip.setTextColor(active ? theme.success : theme.subtext);
+        chip.setBackground(theme.stroked(active ? Color.WHITE : theme.surfaceHigh,
+                active ? UiTheme.mix(theme.success, Color.WHITE, 0.35f) : theme.outline,
+                18,
+                this));
     }
 
     private Button primaryButton(String text) {
-        Button button = new Button(this);
-        button.setText(text);
-        button.setTextColor(Color.WHITE);
-        button.setTextSize(15);
-        button.setAllCaps(false);
-        button.setBackgroundResource(com.fish.autoclicker.R.drawable.bg_button);
+        Button button = baseButton(text);
+        button.setTextColor(theme.onAccent());
+        button.setBackground(theme.ripple(theme.rounded(theme.accent, 20, this), theme.accentStrong));
         return button;
     }
 
-    private Button secondaryButton(String text) {
-        Button button = new Button(this);
-        button.setText(text);
-        button.setTextColor(Color.rgb(15, 23, 42));
-        button.setTextSize(15);
-        button.setAllCaps(false);
-        button.setBackgroundResource(com.fish.autoclicker.R.drawable.bg_panel);
+    private Button tonalButton(String text) {
+        Button button = baseButton(text);
+        button.setTextColor(theme.accentStrong);
+        button.setBackground(theme.ripple(theme.rounded(theme.accentSoft, 18, this), theme.accent));
         return button;
     }
 
-    private LinearLayout twoColumns(View left, View right) {
-        LinearLayout row = new LinearLayout(this);
-        row.setOrientation(LinearLayout.HORIZONTAL);
-        row.setPadding(0, dp(4), 0, dp(4));
-        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(0, dp(54), 1f);
-        params.setMargins(0, 0, dp(8), 0);
-        row.addView(left, params);
-        LinearLayout.LayoutParams paramsRight = new LinearLayout.LayoutParams(0, dp(54), 1f);
-        row.addView(right, paramsRight);
-        return row;
+    private Button quietButton(String text) {
+        Button button = baseButton(text);
+        button.setTextColor(theme.text);
+        button.setBackground(theme.ripple(theme.stroked(theme.surface, theme.outline, 18, this), theme.accent));
+        return button;
+    }
+
+    private Button pillButton(String text) {
+        Button button = baseButton(text);
+        button.setTextSize(14);
+        button.setTextColor(theme.accentStrong);
+        button.setBackground(theme.ripple(theme.rounded(theme.accentSoft, 24, this), theme.accent));
+        return button;
+    }
+
+    private Button baseButton(String text) {
+        Button button = new Button(this);
+        button.setText(text);
+        button.setTextSize(16);
+        button.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
+        button.setAllCaps(false);
+        button.setMinHeight(0);
+        button.setMinWidth(0);
+        button.setMinimumHeight(0);
+        button.setMinimumWidth(0);
+        button.setPadding(dp(14), 0, dp(14), 0);
+        return button;
+    }
+
+    private void tintSwitch(Switch control) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.LOLLIPOP) {
+            return;
+        }
+        int[][] states = new int[][]{
+                new int[]{android.R.attr.state_checked},
+                new int[]{}
+        };
+        control.setThumbTintList(new android.content.res.ColorStateList(
+                states,
+                new int[]{theme.accent, Color.WHITE}
+        ));
+        control.setTrackTintList(new android.content.res.ColorStateList(
+                states,
+                new int[]{theme.accentSoft, theme.outline}
+        ));
     }
 
     private LinearLayout.LayoutParams matchWrap() {
@@ -341,9 +584,13 @@ public class MainActivity extends android.app.Activity {
         );
     }
 
-    private LinearLayout.LayoutParams matchWrapWithTop() {
-        LinearLayout.LayoutParams params = matchWrap();
-        params.setMargins(0, dp(10), 0, 0);
+    private LinearLayout.LayoutParams topMargin(int topDp) {
+        return topMargin(topDp, LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
+    }
+
+    private LinearLayout.LayoutParams topMargin(int topDp, int width, int height) {
+        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(width, height);
+        params.setMargins(0, dp(topDp), 0, 0);
         return params;
     }
 
@@ -364,15 +611,19 @@ public class MainActivity extends android.app.Activity {
     }
 
     private int dp(int value) {
-        return Math.round(value * getResources().getDisplayMetrics().density);
+        return UiTheme.dp(this, value);
     }
 
     private void registerReceiverCompat() {
+        if (receiverRegistered) {
+            return;
+        }
         IntentFilter filter = new IntentFilter(ClickController.ACTION_STATE_CHANGED);
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             registerReceiver(stateReceiver, filter, Context.RECEIVER_NOT_EXPORTED);
         } else {
             registerReceiver(stateReceiver, filter);
         }
+        receiverRegistered = true;
     }
 }
