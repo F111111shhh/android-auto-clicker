@@ -13,6 +13,8 @@ import android.text.InputType;
 import android.text.TextUtils;
 import android.view.Gravity;
 import android.view.View;
+import android.view.ViewTreeObserver;
+import android.view.WindowInsets;
 import android.view.WindowManager;
 import android.widget.Button;
 import android.widget.CompoundButton;
@@ -58,6 +60,12 @@ public class MainActivity extends android.app.Activity {
     private View countBlock;
     private View jitterBlock;
     private ScrollView scrollView;
+    private LinearLayout contentRoot;
+    private int baseRootBottomPadding;
+    private int keyboardInsetBottom;
+    private int windowInsetsKeyboardBottom;
+    private int layoutKeyboardBottom;
+    private ViewTreeObserver.OnGlobalLayoutListener keyboardLayoutListener;
     private ClickConfig config;
     private String regionMode = ClickConfig.REGION_RECT;
     private boolean receiverRegistered;
@@ -100,6 +108,15 @@ public class MainActivity extends android.app.Activity {
         saveFromForm();
     }
 
+    @Override
+    protected void onDestroy() {
+        if (scrollView != null && keyboardLayoutListener != null) {
+            scrollView.getViewTreeObserver().removeOnGlobalLayoutListener(keyboardLayoutListener);
+            keyboardLayoutListener = null;
+        }
+        super.onDestroy();
+    }
+
     private View buildContent() {
         ScrollView scroll = new ScrollView(this);
         scrollView = scroll;
@@ -108,9 +125,12 @@ public class MainActivity extends android.app.Activity {
         scroll.setBackgroundColor(theme.background);
 
         LinearLayout root = new LinearLayout(this);
+        contentRoot = root;
+        baseRootBottomPadding = dp(30);
         root.setOrientation(LinearLayout.VERTICAL);
-        root.setPadding(dp(20), statusTopPadding(), dp(20), dp(240));
+        root.setPadding(dp(20), statusTopPadding(), dp(20), baseRootBottomPadding);
         scroll.addView(root, matchWrap());
+        installKeyboardAvoidance(scroll);
 
         root.addView(header());
         root.addView(statusCard(), topMargin(16));
@@ -506,8 +526,9 @@ public class MainActivity extends android.app.Activity {
         if (scrollView == null) {
             return;
         }
-        scrollInputIntoView(view, 180);
-        scrollInputIntoView(view, 380);
+        scrollInputIntoView(view, 120);
+        scrollInputIntoView(view, 320);
+        scrollInputIntoView(view, 560);
     }
 
     private void scrollInputIntoView(final View view, int delayMs) {
@@ -517,15 +538,104 @@ public class MainActivity extends android.app.Activity {
                 if (scrollView == null) {
                     return;
                 }
+                setLayoutKeyboardInset(estimateKeyboardInset());
                 Rect rect = new Rect();
                 view.getDrawingRect(rect);
                 scrollView.offsetDescendantRectToMyCoords(view, rect);
-                int target = Math.max(0, rect.bottom - scrollView.getHeight() + dp(220));
-                if (target > scrollView.getScrollY()) {
+                int bottomClearance = keyboardInsetBottom > 0
+                        ? keyboardInsetBottom + dp(36)
+                        : dp(120);
+                int target = Math.max(0, rect.bottom - scrollView.getHeight() + bottomClearance);
+                int current = scrollView.getScrollY();
+                if (rect.top - current < dp(18)) {
+                    target = Math.max(0, rect.top - dp(18));
+                    scrollView.smoothScrollTo(0, target);
+                } else if (target > current) {
                     scrollView.smoothScrollTo(0, target);
                 }
             }
         }, delayMs);
+    }
+
+    private void installKeyboardAvoidance(final ScrollView scroll) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.KITKAT_WATCH) {
+            scroll.setOnApplyWindowInsetsListener(new View.OnApplyWindowInsetsListener() {
+                @Override
+                public WindowInsets onApplyWindowInsets(View v, WindowInsets insets) {
+                    setWindowInsetsKeyboardInset(keyboardInsetFromInsets(insets));
+                    return insets;
+                }
+            });
+            scroll.requestApplyInsets();
+        }
+        keyboardLayoutListener = new ViewTreeObserver.OnGlobalLayoutListener() {
+            @Override
+            public void onGlobalLayout() {
+                setLayoutKeyboardInset(estimateKeyboardInset());
+            }
+        };
+        scroll.getViewTreeObserver().addOnGlobalLayoutListener(keyboardLayoutListener);
+    }
+
+    private int keyboardInsetFromInsets(WindowInsets insets) {
+        if (insets == null) {
+            return 0;
+        }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            int ime = insets.getInsets(WindowInsets.Type.ime()).bottom;
+            int navigation = insets.getInsets(WindowInsets.Type.navigationBars()).bottom;
+            return Math.max(0, ime - navigation);
+        }
+        return 0;
+    }
+
+    private int estimateKeyboardInset() {
+        if (scrollView == null) {
+            return 0;
+        }
+        Rect visible = new Rect();
+        View root = scrollView.getRootView();
+        root.getWindowVisibleDisplayFrame(visible);
+        int hidden = Math.max(0, root.getHeight() - visible.bottom);
+        return hidden > dp(140) ? hidden : 0;
+    }
+
+    private void setWindowInsetsKeyboardInset(int inset) {
+        windowInsetsKeyboardBottom = Math.max(0, inset);
+        applyKeyboardInset();
+    }
+
+    private void setLayoutKeyboardInset(int inset) {
+        layoutKeyboardBottom = Math.max(0, inset);
+        applyKeyboardInset();
+    }
+
+    private void applyKeyboardInset() {
+        int normalized = Math.max(windowInsetsKeyboardBottom, layoutKeyboardBottom);
+        if (Math.abs(normalized - keyboardInsetBottom) < dp(6)) {
+            return;
+        }
+        keyboardInsetBottom = normalized;
+        updateContentBottomPadding();
+        View focused = getCurrentFocus();
+        if (keyboardInsetBottom > 0 && focused instanceof EditText) {
+            ensureFocusedInputVisible(focused);
+        }
+    }
+
+    private void updateContentBottomPadding() {
+        if (contentRoot == null) {
+            return;
+        }
+        int dynamicBottom = keyboardInsetBottom > 0
+                ? keyboardInsetBottom + dp(28)
+                : baseRootBottomPadding;
+        contentRoot.setPadding(
+                contentRoot.getPaddingLeft(),
+                contentRoot.getPaddingTop(),
+                contentRoot.getPaddingRight(),
+                dynamicBottom
+        );
     }
 
     private View inputBlock(EditText input) {

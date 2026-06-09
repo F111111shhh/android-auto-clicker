@@ -3,7 +3,7 @@
 [中文](README.md) | [English](README.en.md)
 
 ![Android](https://img.shields.io/badge/Android-8.0%2B-3DDC84?logo=android&logoColor=white)
-![Release](https://img.shields.io/badge/release-v1.0.4-2563eb)
+![Release](https://img.shields.io/badge/release-v1.0.5-2563eb)
 ![Java](https://img.shields.io/badge/Java-Native%20Views-f97316)
 
 A lightweight Android auto clicker with a clean Material You-inspired interface. It uses Android Accessibility Service to perform user-configured taps, while a floating overlay provides quick controls for start, pause, stop, region selection, and compact bubble mode.
