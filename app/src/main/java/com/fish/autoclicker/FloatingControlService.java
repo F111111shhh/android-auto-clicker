@@ -14,6 +14,7 @@ import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.Paint;
 import android.graphics.RectF;
+import android.graphics.drawable.GradientDrawable;
 import android.os.Build;
 import android.os.Handler;
 import android.os.IBinder;
@@ -233,7 +234,11 @@ public class FloatingControlService extends Service {
         bubble.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
         bubble.setGravity(Gravity.CENTER);
         bubble.setTextColor(theme.onAccent());
-        bubble.setBackground(theme.ripple(theme.rounded(theme.accent, 28, this), theme.accentStrong));
+        bubble.setIncludeFontPadding(false);
+        GradientDrawable bubbleShape = new GradientDrawable();
+        bubbleShape.setShape(GradientDrawable.OVAL);
+        bubbleShape.setColor(theme.accent);
+        bubble.setBackground(theme.ripple(bubbleShape, theme.accentStrong));
         bubble.setElevation(dp(10));
 
         bubbleParams = overlayParams(dp(56), dp(56));
@@ -540,6 +545,7 @@ public class FloatingControlService extends Service {
         private final Paint handlePaint = new Paint(Paint.ANTI_ALIAS_FLAG);
         private final Paint textPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
         private final RectF rect = new RectF();
+        private final int[] screenLocation = new int[2];
         private final ClickConfig draft;
         private final boolean selectingRandomRange;
         private boolean circleMode;
@@ -567,22 +573,28 @@ public class FloatingControlService extends Service {
         @Override
         protected void onDraw(Canvas canvas) {
             super.onDraw(canvas);
+            captureScreenLocation();
             canvas.drawRect(0, 0, getWidth(), getHeight(), dimPaint);
 
             if (selectingRandomRange) {
                 if (circleMode) {
-                    canvas.drawCircle(draft.centerX, draft.centerY, draft.radius, shapePaint);
-                    canvas.drawCircle(draft.centerX, draft.centerY, dp(6), handlePaint);
-                    canvas.drawCircle(draft.centerX + draft.radius, draft.centerY, dp(7), handlePaint);
+                    float localCenterX = screenToLocalX(draft.centerX);
+                    float localCenterY = screenToLocalY(draft.centerY);
+                    canvas.drawCircle(localCenterX, localCenterY, draft.radius, shapePaint);
+                    canvas.drawCircle(localCenterX, localCenterY, dp(6), handlePaint);
+                    canvas.drawCircle(localCenterX + draft.radius, localCenterY, dp(7), handlePaint);
                 } else {
                     rect.set(draft.rect());
+                    rect.offset(-screenLocation[0], -screenLocation[1]);
                     canvas.drawRect(rect, shapePaint);
                     canvas.drawCircle(rect.left, rect.top, dp(7), handlePaint);
                     canvas.drawCircle(rect.right, rect.bottom, dp(7), handlePaint);
                 }
             } else {
-                canvas.drawCircle(draft.fixedX, draft.fixedY, dp(20), shapePaint);
-                canvas.drawCircle(draft.fixedX, draft.fixedY, dp(7), handlePaint);
+                float localFixedX = screenToLocalX(draft.fixedX);
+                float localFixedY = screenToLocalY(draft.fixedY);
+                canvas.drawCircle(localFixedX, localFixedY, dp(20), shapePaint);
+                canvas.drawCircle(localFixedX, localFixedY, dp(7), handlePaint);
             }
 
             drawButton(canvas, 0, "保存");
@@ -596,74 +608,77 @@ public class FloatingControlService extends Service {
 
         @Override
         public boolean onTouchEvent(MotionEvent event) {
+            captureScreenLocation();
+            float localX = event.getX();
+            float localY = event.getY();
+            float screenX = localToScreenX(localX);
+            float screenY = localToScreenY(localY);
             switch (event.getActionMasked()) {
                 case MotionEvent.ACTION_DOWN:
-                    downX = event.getX();
-                    downY = event.getY();
-                    buttonMode = hitButton(downX, downY);
+                    downX = screenX;
+                    downY = screenY;
+                    buttonMode = hitButton(localX, localY);
                     if (buttonMode != ButtonMode.NONE) {
                         return true;
                     }
                     if (!selectingRandomRange) {
-                        draft.fixedX = clamp(downX, 0f, getWidth());
-                        draft.fixedY = clamp(downY, 0f, getHeight());
+                        draft.fixedX = clamp(screenX, screenLeft(), screenRight());
+                        draft.fixedY = clamp(screenY, screenTop(), screenBottom());
                         invalidate();
                         return true;
                     }
-                    draggingExisting = hitExistingShape(downX, downY);
+                    draggingExisting = hitExistingShape(screenX, screenY);
                     if (!draggingExisting) {
                         if (circleMode) {
-                            draft.centerX = downX;
-                            draft.centerY = downY;
+                            draft.centerX = screenX;
+                            draft.centerY = screenY;
                             draft.radius = dp(20);
                         } else {
-                            draft.left = downX;
-                            draft.top = downY;
-                            draft.right = downX + 1;
-                            draft.bottom = downY + 1;
+                            draft.left = screenX;
+                            draft.top = screenY;
+                            draft.right = screenX + 1;
+                            draft.bottom = screenY + 1;
                         }
                     }
                     invalidate();
                     return true;
                 case MotionEvent.ACTION_MOVE:
-                    float x = event.getX();
-                    float y = event.getY();
                     if (buttonMode != ButtonMode.NONE) {
                         return true;
                     }
                     if (!selectingRandomRange) {
-                        draft.fixedX = clamp(x, 0f, getWidth());
-                        draft.fixedY = clamp(y, 0f, getHeight());
+                        draft.fixedX = clamp(screenX, screenLeft(), screenRight());
+                        draft.fixedY = clamp(screenY, screenTop(), screenBottom());
                         invalidate();
                         return true;
                     }
                     if (circleMode) {
                         if (draggingExisting) {
-                            draft.centerX += x - downX;
-                            draft.centerY += y - downY;
-                            downX = x;
-                            downY = y;
+                            draft.centerX += screenX - downX;
+                            draft.centerY += screenY - downY;
+                            downX = screenX;
+                            downY = screenY;
                         } else {
-                            draft.radius = Math.max(dp(8), distance(draft.centerX, draft.centerY, x, y));
+                            draft.radius = Math.max(dp(8), distance(draft.centerX, draft.centerY, screenX, screenY));
                         }
                     } else if (draggingExisting) {
-                        float dx = x - downX;
-                        float dy = y - downY;
+                        float dx = screenX - downX;
+                        float dy = screenY - downY;
                         draft.left += dx;
                         draft.right += dx;
                         draft.top += dy;
                         draft.bottom += dy;
-                        downX = x;
-                        downY = y;
+                        downX = screenX;
+                        downY = screenY;
                     } else {
-                        draft.right = x;
-                        draft.bottom = y;
+                        draft.right = screenX;
+                        draft.bottom = screenY;
                     }
                     clampToScreen();
                     invalidate();
                     return true;
                 case MotionEvent.ACTION_UP:
-                    ButtonMode upMode = hitButton(event.getX(), event.getY());
+                    ButtonMode upMode = hitButton(localX, localY);
                     if (buttonMode != ButtonMode.NONE && buttonMode == upMode) {
                         handleButton(upMode);
                     }
@@ -684,17 +699,22 @@ public class FloatingControlService extends Service {
         }
 
         private void clampToScreen() {
-            int width = Math.max(1, getWidth());
-            int height = Math.max(1, getHeight());
+            float left = screenLeft();
+            float top = screenTop();
+            float right = screenRight();
+            float bottom = screenBottom();
+            float width = Math.max(1f, right - left);
+            float height = Math.max(1f, bottom - top);
             if (circleMode) {
-                draft.radius = Math.max(1f, Math.min(draft.radius, Math.max(width, height)));
-                draft.centerX = clamp(draft.centerX, 0f, width);
-                draft.centerY = clamp(draft.centerY, 0f, height);
+                float maxRadius = Math.max(1f, Math.min(width, height) / 2f);
+                draft.radius = Math.max(1f, Math.min(draft.radius, maxRadius));
+                draft.centerX = clamp(draft.centerX, left + draft.radius, right - draft.radius);
+                draft.centerY = clamp(draft.centerY, top + draft.radius, bottom - draft.radius);
             } else {
-                draft.left = clamp(draft.left, 0f, width);
-                draft.right = clamp(draft.right, 0f, width);
-                draft.top = clamp(draft.top, 0f, height);
-                draft.bottom = clamp(draft.bottom, 0f, height);
+                draft.left = clamp(draft.left, left, right);
+                draft.right = clamp(draft.right, left, right);
+                draft.top = clamp(draft.top, top, bottom);
+                draft.bottom = clamp(draft.bottom, top, bottom);
             }
         }
 
@@ -719,6 +739,7 @@ public class FloatingControlService extends Service {
                     draft.top = draft.centerY - draft.radius;
                     draft.bottom = draft.centerY + draft.radius;
                 }
+                clampToScreen();
                 invalidate();
             } else if (mode == ButtonMode.CANCEL) {
                 removeRegionOverlay();
@@ -773,6 +794,42 @@ public class FloatingControlService extends Service {
 
         private float clamp(float value, float min, float max) {
             return Math.max(min, Math.min(max, value));
+        }
+
+        private void captureScreenLocation() {
+            getLocationOnScreen(screenLocation);
+        }
+
+        private float localToScreenX(float localX) {
+            return screenLocation[0] + localX;
+        }
+
+        private float localToScreenY(float localY) {
+            return screenLocation[1] + localY;
+        }
+
+        private float screenToLocalX(float screenX) {
+            return screenX - screenLocation[0];
+        }
+
+        private float screenToLocalY(float screenY) {
+            return screenY - screenLocation[1];
+        }
+
+        private float screenLeft() {
+            return screenLocation[0];
+        }
+
+        private float screenTop() {
+            return screenLocation[1];
+        }
+
+        private float screenRight() {
+            return screenLocation[0] + Math.max(1, getWidth());
+        }
+
+        private float screenBottom() {
+            return screenLocation[1] + Math.max(1, getHeight());
         }
     }
 

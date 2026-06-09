@@ -3,7 +3,7 @@
 [中文](README.md) | [English](README.en.md)
 
 ![Android](https://img.shields.io/badge/Android-8.0%2B-3DDC84?logo=android&logoColor=white)
-![Release](https://img.shields.io/badge/release-v1.0.3-2563eb)
+![Release](https://img.shields.io/badge/release-v1.0.4-2563eb)
 ![Java](https://img.shields.io/badge/Java-Native%20Views-f97316)
 
 A lightweight Android auto clicker with a clean Material You-inspired interface. It uses Android Accessibility Service to perform user-configured taps, while a floating overlay provides quick controls for start, pause, stop, region selection, and compact bubble mode.
@@ -11,6 +11,19 @@ A lightweight Android auto clicker with a clean Material You-inspired interface.
 The app is designed for repeated taps, fixed-point tapping, random taps inside a selected area, and click intervals with optional timing jitter. It does not require root access, does not read content from other apps, and does not upload user data.
 
 [Download the latest APK](https://github.com/F111111shhh/android-auto-clicker/releases/latest)
+
+## Screenshots
+
+<table>
+  <tr>
+    <td align="center"><img src="docs/images/floating-panel.jpg" width="280" alt="Floating control panel"><br>Floating control panel</td>
+    <td align="center"><img src="docs/images/main-settings.jpg" width="280" alt="Main settings"><br>Main settings</td>
+  </tr>
+  <tr>
+    <td align="center"><img src="docs/images/range-settings.jpg" width="280" alt="Click area settings"><br>Click area settings</td>
+    <td align="center"><img src="docs/images/permissions.jpg" width="280" alt="Permissions and system settings"><br>Permissions and system settings</td>
+  </tr>
+</table>
 
 ## Features
 

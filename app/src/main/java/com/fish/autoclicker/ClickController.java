@@ -6,6 +6,7 @@ import android.graphics.PointF;
 import android.os.Handler;
 import android.os.Looper;
 
+import java.security.SecureRandom;
 import java.util.Random;
 
 final class ClickController {
@@ -19,7 +20,7 @@ final class ClickController {
     private static final ClickController INSTANCE = new ClickController();
 
     private final Handler handler = new Handler(Looper.getMainLooper());
-    private final Random random = new Random();
+    private final Random random = new SecureRandom();
     private ClickConfig config;
     private Context appContext;
     private boolean running;

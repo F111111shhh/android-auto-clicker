@@ -5,6 +5,7 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
 import android.graphics.Color;
+import android.graphics.Rect;
 import android.graphics.Typeface;
 import android.os.Build;
 import android.os.Bundle;
@@ -12,6 +13,7 @@ import android.text.InputType;
 import android.text.TextUtils;
 import android.view.Gravity;
 import android.view.View;
+import android.view.WindowManager;
 import android.widget.Button;
 import android.widget.CompoundButton;
 import android.widget.EditText;
@@ -55,6 +57,7 @@ public class MainActivity extends android.app.Activity {
     private LinearLayout fixedPointFields;
     private View countBlock;
     private View jitterBlock;
+    private ScrollView scrollView;
     private ClickConfig config;
     private String regionMode = ClickConfig.REGION_RECT;
     private boolean receiverRegistered;
@@ -69,6 +72,7 @@ public class MainActivity extends android.app.Activity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        getWindow().setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE);
         theme = UiTheme.from(this);
         theme.styleSystemBars(this);
         config = ClickConfig.load(this);
@@ -98,12 +102,14 @@ public class MainActivity extends android.app.Activity {
 
     private View buildContent() {
         ScrollView scroll = new ScrollView(this);
+        scrollView = scroll;
         scroll.setFillViewport(false);
+        scroll.setClipToPadding(false);
         scroll.setBackgroundColor(theme.background);
 
         LinearLayout root = new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
-        root.setPadding(dp(20), statusTopPadding(), dp(20), dp(30));
+        root.setPadding(dp(20), statusTopPadding(), dp(20), dp(240));
         scroll.addView(root, matchWrap());
 
         root.addView(header());
@@ -479,7 +485,47 @@ public class MainActivity extends android.app.Activity {
         editText.setInputType(InputType.TYPE_CLASS_NUMBER | InputType.TYPE_NUMBER_FLAG_DECIMAL);
         editText.setPadding(dp(14), 0, dp(14), 0);
         editText.setBackground(theme.stroked(theme.field, theme.outline, 16, this));
+        editText.setOnFocusChangeListener(new View.OnFocusChangeListener() {
+            @Override
+            public void onFocusChange(View v, boolean hasFocus) {
+                if (hasFocus) {
+                    ensureFocusedInputVisible(v);
+                }
+            }
+        });
+        editText.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                ensureFocusedInputVisible(v);
+            }
+        });
         return editText;
+    }
+
+    private void ensureFocusedInputVisible(final View view) {
+        if (scrollView == null) {
+            return;
+        }
+        scrollInputIntoView(view, 180);
+        scrollInputIntoView(view, 380);
+    }
+
+    private void scrollInputIntoView(final View view, int delayMs) {
+        view.postDelayed(new Runnable() {
+            @Override
+            public void run() {
+                if (scrollView == null) {
+                    return;
+                }
+                Rect rect = new Rect();
+                view.getDrawingRect(rect);
+                scrollView.offsetDescendantRectToMyCoords(view, rect);
+                int target = Math.max(0, rect.bottom - scrollView.getHeight() + dp(220));
+                if (target > scrollView.getScrollY()) {
+                    scrollView.smoothScrollTo(0, target);
+                }
+            }
+        }, delayMs);
     }
 
     private View inputBlock(EditText input) {

@@ -3,7 +3,7 @@
 [中文](README.md) | [English](README.en.md)
 
 ![Android](https://img.shields.io/badge/Android-8.0%2B-3DDC84?logo=android&logoColor=white)
-![Release](https://img.shields.io/badge/release-v1.0.3-2563eb)
+![Release](https://img.shields.io/badge/release-v1.0.4-2563eb)
 ![Java](https://img.shields.io/badge/Java-Native%20Views-f97316)
 
 一个轻量、直观、偏 Material You 风格的安卓连点器。它通过 Android 辅助功能服务执行你主动配置的点击任务，并用悬浮窗提供开始、暂停、停止、选区和悬浮球控制。
@@ -11,6 +11,19 @@
 它适合需要重复点击、固定点点击、区域内随机点击，或需要轻微随机间隔的场景。应用不需要 root，不读取目标应用内容，也不会上传数据。
 
 [下载最新 APK](https://github.com/F111111shhh/android-auto-clicker/releases/latest)
+
+## 界面预览
+
+<table>
+  <tr>
+    <td align="center"><img src="docs/images/floating-panel.jpg" width="280" alt="悬浮控制面板"><br>悬浮控制面板</td>
+    <td align="center"><img src="docs/images/main-settings.jpg" width="280" alt="主设置界面"><br>主设置界面</td>
+  </tr>
+  <tr>
+    <td align="center"><img src="docs/images/range-settings.jpg" width="280" alt="点击范围设置"><br>点击范围设置</td>
+    <td align="center"><img src="docs/images/permissions.jpg" width="280" alt="权限与系统设置"><br>权限与系统设置</td>
+  </tr>
+</table>
 
 ## 主要功能
 
