@@ -1,31 +1,55 @@
-# 连点器
+# 连点器 / Android Auto Clicker
 
-一个个人使用的安卓连点器。它通过 Android 辅助功能服务执行用户主动配置的点击，通过悬浮窗提供开始、暂停、停止和选区控制。
+![Android](https://img.shields.io/badge/Android-8.0%2B-3DDC84?logo=android&logoColor=white)
+![Release](https://img.shields.io/badge/release-v1.0.3-2563eb)
+![Java](https://img.shields.io/badge/Java-Native%20Views-f97316)
 
-## 功能
+一个轻量、直观、偏 Material You 风格的安卓连点器。它通过 Android 辅助功能服务执行你主动配置的点击任务，并用悬浮窗提供开始、暂停、停止、选区和悬浮球控制。
 
-- 设置固定点击次数或无限点击。
-- 设置点击间隔毫秒。
-- 支持矩形范围和中心点半径两种点击范围。
-- 可在指定范围内随机点击。
-- 可开启随机时间浮动，避免完全相同间隔。
-- 支持悬浮窗控制：开始、暂停、停止、选区、回到设置。
-- 保存上次参数，下次打开自动恢复。
+它适合需要重复点击、固定点点击、区域内随机点击，或需要轻微随机间隔的场景。应用不需要 root，不读取目标应用内容，也不会上传数据。
 
-## 安装
+[下载最新 APK](https://github.com/F111111shhh/android-auto-clicker/releases/latest)
 
-1. 安装 Release 页面中的 APK。
-2. 打开应用，按提示开启“悬浮窗权限”。
-3. 打开“辅助功能权限”，启用“连点器点击服务”。
-4. 回到应用设置点击次数、频率和范围。
-5. 打开悬浮控制，在目标应用里点击“开始”。
+## 主要功能
 
-## 权限说明
+- **点击次数**：支持固定次数，也支持无限点击并手动停止。
+- **点击频率**：支持按点击间隔毫秒设置点击速度。
+- **点击范围**：支持拖拽矩形区域，也支持中心点加半径的圆形范围。
+- **随机点击**：开启后会在指定矩形或圆形范围内随机取点，避免超出已选区域。
+- **固定点击点**：关闭区域随机后，可单独选择一个固定点击点。
+- **不等间隔**：可开启随机时间浮动，让每次点击不完全按相同间隔触发。
+- **悬浮控制**：支持开始、暂停/继续、停止、选择区域和回到设置。
+- **悬浮球模式**：悬浮窗一段时间无操作后自动收起，点击悬浮球可再次展开。
+- **透明度调节**：可调节悬浮窗透明度，减少常驻遮挡。
+- **参数保存**：自动记住上次设置，下次打开继续使用。
 
-- 悬浮窗权限：用于显示控制面板和范围选择层。
-- 辅助功能权限：用于执行你设置的屏幕点击。
+## 界面设计
 
-应用不需要 root，不读取目标应用内容，不上传数据。
+- 采用类似 Material You 的动态主题色，尽量贴近系统/壁纸色彩。
+- 使用 superellipse/squircle 平滑圆角，让卡片、按钮和输入区域更接近 iOS/Figma 的连续曲线观感。
+- 将权限入口放入独立页面，主界面更专注于点击参数。
+- 开关关闭时，相关设置会自动置灰并禁止输入，避免无效配置。
+- 主界面、权限页和悬浮窗都为状态栏与实际使用场景做了间距处理。
+
+## 使用方法
+
+1. 在 Release 页面下载并安装 APK。
+2. 打开应用，进入权限页面开启悬浮窗权限。
+3. 按提示进入系统辅助功能设置，启用“连点器点击服务”。
+4. 回到应用设置点击次数、点击间隔、点击范围和随机选项。
+5. 打开悬浮控制，在目标界面选择点击点或区域。
+6. 点击悬浮窗上的开始，任务会按你的设置执行。
+
+## 权限与隐私
+
+- **悬浮窗权限**：用于显示控制面板、悬浮球和选区层。
+- **辅助功能权限**：用于调用系统点击手势接口，执行你设置的屏幕点击。
+
+应用不会请求 root 权限，不会读取目标应用中的文字、图片或账号信息，不会上传点击配置或设备数据。
+
+## 注意事项
+
+请只在你有权操作的应用和场景中使用本工具。部分游戏、平台或应用可能禁止自动点击行为，使用前请自行确认相关规则。
 
 ## 本地构建
 
@@ -37,4 +61,55 @@ $env:ANDROID_HOME='C:\Users\FISH\AppData\Local\Android\Sdk'
 .\gradlew.bat :app:assembleRelease
 ```
 
-本地签名文件位于 `keystore/`，已被 `.gitignore` 排除。
+本地签名文件位于 `keystore/`，已被 `.gitignore` 排除，不会上传到 GitHub。
+
+---
+
+# Android Auto Clicker
+
+A lightweight Android auto clicker with a clean Material You-inspired interface. It uses Android Accessibility Service to perform user-configured taps, while a floating overlay provides quick controls for start, pause, stop, region selection, and compact bubble mode.
+
+The app is designed for repeated taps, fixed-point tapping, random taps inside a selected area, and click intervals with optional timing jitter. It does not require root access, does not read content from other apps, and does not upload user data.
+
+[Download the latest APK](https://github.com/F111111shhh/android-auto-clicker/releases/latest)
+
+## Features
+
+- **Click count**: Run a fixed number of clicks or keep clicking until stopped manually.
+- **Click interval**: Configure the click speed by setting the interval in milliseconds.
+- **Click area**: Select either a draggable rectangle or a circular area with center and radius.
+- **Random area clicks**: Generate random tap points inside the selected rectangle or circle without leaving the selected bounds.
+- **Fixed tap point**: When random area tapping is disabled, choose one exact tap point.
+- **Timing jitter**: Add randomized interval variation so taps are not triggered at identical intervals.
+- **Floating controls**: Start, pause/resume, stop, select area, and return to settings from the overlay.
+- **Bubble mode**: The floating panel collapses into a compact bubble after a period of inactivity.
+- **Overlay opacity**: Adjust the floating window opacity to reduce visual obstruction.
+- **Saved settings**: The last configuration is restored automatically the next time the app opens.
+
+## Design
+
+- Dynamic, wallpaper-aware color styling inspired by Material You.
+- Smooth superellipse/squircle corners for cards, buttons, and input fields.
+- A separate permissions screen keeps the main configuration page focused.
+- Disabled options are greyed out and locked until the corresponding switch is enabled.
+- Status bar spacing and overlay ergonomics are handled for daily phone use.
+
+## How To Use
+
+1. Download and install the APK from the Release page.
+2. Open the app and enable the floating window permission.
+3. Enable “连点器点击服务” in Android Accessibility settings.
+4. Return to the app and configure click count, interval, area, and randomization.
+5. Open the floating control panel and select a tap point or region on the target screen.
+6. Tap start on the overlay to run the click task.
+
+## Permissions And Privacy
+
+- **Floating window permission**: Displays the control panel, bubble, and selection overlay.
+- **Accessibility permission**: Uses Android gesture dispatch to perform the taps you configure.
+
+The app does not request root access, does not inspect content inside other apps, and does not upload click settings or device data.
+
+## Responsible Use
+
+Use this tool only in apps and situations where you are allowed to automate taps. Some games, services, or platforms may forbid auto-clicking, so check their rules before using it.
