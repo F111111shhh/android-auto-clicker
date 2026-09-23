@@ -275,7 +275,7 @@ public class MainActivity extends android.app.Activity {
         fixedPointFields.addView(hint);
         card.addView(fixedPointFields);
 
-        Button selectRegion = tonalButton("打开悬浮窗并选择范围/点击点");
+        Button selectRegion = primaryButton("打开悬浮窗并选择范围/点击点");
         selectRegion.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
@@ -283,7 +283,7 @@ public class MainActivity extends android.app.Activity {
                 ensureOverlayThenStart(true);
             }
         });
-        card.addView(selectRegion, topMargin(12, LinearLayout.LayoutParams.MATCH_PARENT, dp(52)));
+        card.addView(selectRegion, topMargin(12, LinearLayout.LayoutParams.MATCH_PARENT, dp(58)));
         return card;
     }
 
@@ -330,11 +330,14 @@ public class MainActivity extends android.app.Activity {
             @Override
             public void onClick(View v) {
                 saveFromForm();
-                Toast.makeText(MainActivity.this, "已保存", Toast.LENGTH_SHORT).show();
+                String confirmation = ClickController.get().isRunning()
+                        ? "已保存；停止后重新开始将使用新设置"
+                        : "已保存并同步悬浮窗";
+                Toast.makeText(MainActivity.this, confirmation, Toast.LENGTH_SHORT).show();
                 updateStatus("已保存设置");
             }
         });
-        panel.addView(save, topMargin(10, LinearLayout.LayoutParams.MATCH_PARENT, dp(54)));
+        panel.addView(save, topMargin(10, LinearLayout.LayoutParams.MATCH_PARENT, dp(58)));
 
         Button permissions = quietButton("权限与系统设置");
         permissions.setOnClickListener(new View.OnClickListener() {
@@ -343,7 +346,16 @@ public class MainActivity extends android.app.Activity {
                 startActivity(new Intent(MainActivity.this, PermissionActivity.class));
             }
         });
-        panel.addView(permissions, topMargin(10, LinearLayout.LayoutParams.MATCH_PARENT, dp(50)));
+        panel.addView(permissions, topMargin(10, LinearLayout.LayoutParams.MATCH_PARENT, dp(58)));
+
+        Button about = quietButton("关于软件");
+        about.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                startActivity(new Intent(MainActivity.this, AboutActivity.class));
+            }
+        });
+        panel.addView(about, topMargin(10, LinearLayout.LayoutParams.MATCH_PARENT, dp(58)));
         return panel;
     }
 
@@ -436,7 +448,9 @@ public class MainActivity extends android.app.Activity {
                     .append(controller.total() == Integer.MAX_VALUE ? "无限" : controller.total())
                     .append("\n");
         }
-        if (config != null) {
+        if (controller.isRunning()) {
+            builder.append(controller.activeRegionDescription());
+        } else if (config != null) {
             builder.append(config.describeRegion());
         }
         statusBody.setText(builder.toString());
@@ -725,10 +739,10 @@ public class MainActivity extends android.app.Activity {
         if (view == null) {
             return;
         }
-        int bg = selected ? theme.accent : theme.surfaceHigh;
-        int text = selected ? theme.onAccent() : theme.text;
+        int bg = selected ? theme.accent : theme.accentContainer;
+        int text = selected ? theme.onAccent() : theme.accentStrong;
         view.setTextColor(text);
-        view.setBackground(theme.ripple(theme.stroked(bg, selected ? theme.accent : theme.outline, 18, this), theme.accent));
+        view.setBackground(theme.ripple(theme.rounded(bg, 20, this), theme.accent));
     }
 
     private TextView chip(String text, boolean active) {
@@ -763,14 +777,14 @@ public class MainActivity extends android.app.Activity {
     private Button tonalButton(String text) {
         Button button = baseButton(text);
         button.setTextColor(theme.accentStrong);
-        button.setBackground(theme.ripple(theme.rounded(theme.accentSoft, 18, this), theme.accent));
+        button.setBackground(theme.ripple(theme.rounded(theme.accentContainer, 20, this), theme.accent));
         return button;
     }
 
     private Button quietButton(String text) {
         Button button = baseButton(text);
-        button.setTextColor(theme.text);
-        button.setBackground(theme.ripple(theme.stroked(theme.surface, theme.outline, 18, this), theme.accent));
+        button.setTextColor(theme.accentStrong);
+        button.setBackground(theme.ripple(theme.rounded(theme.accentContainer, 20, this), theme.accent));
         return button;
     }
 
@@ -802,7 +816,7 @@ public class MainActivity extends android.app.Activity {
         ));
         control.setTrackTintList(new android.content.res.ColorStateList(
                 states,
-                new int[]{theme.accentSoft, theme.outline}
+                new int[]{theme.accentTrack, theme.outline}
         ));
     }
 

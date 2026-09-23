@@ -3,7 +3,7 @@
 [中文](README.md) | [English](README.en.md)
 
 ![Android](https://img.shields.io/badge/Android-8.0%2B-3DDC84?logo=android&logoColor=white)
-![Release](https://img.shields.io/badge/release-v1.0.5-2563eb)
+![Release](https://img.shields.io/badge/release-v1.0.6-2563eb)
 ![Java](https://img.shields.io/badge/Java-Native%20Views-f97316)
 
 一个轻量、直观、偏 Material You 风格的安卓连点器。它通过 Android 辅助功能服务执行你主动配置的点击任务，并用悬浮窗提供开始、暂停、停止、选区和悬浮球控制。
@@ -75,5 +75,3 @@ $env:JAVA_HOME='C:\Program Files\Android\Android Studio\jbr'
 $env:ANDROID_HOME='C:\Users\FISH\AppData\Local\Android\Sdk'
 .\gradlew.bat :app:assembleRelease
 ```
-
-本地签名文件位于 `keystore/`，已被 `.gitignore` 排除，不会上传到 GitHub。

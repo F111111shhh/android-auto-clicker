@@ -1,6 +1,7 @@
 package com.fish.autoclicker;
 
 import android.content.Context;
+import android.content.Intent;
 import android.content.SharedPreferences;
 import android.graphics.PointF;
 import android.graphics.RectF;
@@ -10,6 +11,7 @@ import java.util.Random;
 
 final class ClickConfig {
     static final String PREFS = "click_config";
+    static final String ACTION_CONFIG_CHANGED = "com.fish.autoclicker.CONFIG_CHANGED";
 
     static final String REGION_RECT = "rect";
     static final String REGION_CIRCLE = "circle";
@@ -81,6 +83,9 @@ final class ClickConfig {
                 .putInt("overlayOpacityPercent", overlayOpacityPercent)
                 .putInt("collapseDelaySeconds", collapseDelaySeconds)
                 .apply();
+        Intent changed = new Intent(ACTION_CONFIG_CHANGED);
+        changed.setPackage(context.getPackageName());
+        context.sendBroadcast(changed);
     }
 
     PointF nextPoint(Random random) {

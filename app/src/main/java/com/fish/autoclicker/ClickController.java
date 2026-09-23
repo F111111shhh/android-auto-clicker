@@ -26,6 +26,8 @@ final class ClickController {
     private boolean running;
     private boolean paused;
     private int completed;
+    private int runId;
+    private boolean gesturePending;
 
     private final Runnable tick = new Runnable() {
         @Override
@@ -39,10 +41,23 @@ final class ClickController {
     }
 
     void start(Context context, ClickConfig newConfig) {
+        if (running) {
+            if (paused) {
+                paused = false;
+                notifyState("继续点击");
+                handler.removeCallbacks(tick);
+                if (!gesturePending) {
+                    handler.postDelayed(tick, Math.max(50, config.nextDelayMs(random)));
+                }
+            }
+            return;
+        }
         appContext = context.getApplicationContext();
         config = newConfig;
         config.save(appContext);
+        runId++;
         completed = 0;
+        gesturePending = false;
         running = true;
         paused = false;
         notifyState("开始点击");
@@ -58,8 +73,8 @@ final class ClickController {
         paused = !paused;
         notifyState(paused ? "已暂停" : "继续点击");
         handler.removeCallbacks(tick);
-        if (!paused) {
-            handler.postDelayed(tick, Math.max(50, config == null ? 100 : config.nextDelayMs(random)));
+        if (!paused && !gesturePending) {
+            handler.postDelayed(tick, Math.max(50, config.nextDelayMs(random)));
         }
     }
 
@@ -83,8 +98,12 @@ final class ClickController {
         return config == null ? 0 : config.maxClicks();
     }
 
+    String activeRegionDescription() {
+        return config == null ? "" : config.describeRegion();
+    }
+
     private void performNext() {
-        if (!running || paused || config == null) {
+        if (!running || paused || config == null || gesturePending) {
             return;
         }
         if (ClickAccessibilityService.instance() == null) {
@@ -97,20 +116,32 @@ final class ClickController {
         }
 
         PointF point = config.nextPoint(random);
+        final int dispatchedRunId = runId;
+        gesturePending = true;
         ClickAccessibilityService.instance().tap(point.x, point.y, new Runnable() {
             @Override
             public void run() {
+                if (dispatchedRunId != runId) {
+                    return;
+                }
+                gesturePending = false;
                 completed++;
                 if (completed >= config.maxClicks()) {
                     stopWithMessage("点击完成");
                 } else if (running && !paused) {
                     notifyState("点击中");
                     handler.postDelayed(tick, config.nextDelayMs(random));
+                } else if (paused) {
+                    notifyState("已暂停");
                 }
             }
         }, new Runnable() {
             @Override
             public void run() {
+                if (dispatchedRunId != runId) {
+                    return;
+                }
+                gesturePending = false;
                 stopWithMessage("点击失败，请确认辅助功能权限");
             }
         });
@@ -118,6 +149,8 @@ final class ClickController {
 
     private void stopWithMessage(String message) {
         handler.removeCallbacks(tick);
+        runId++;
+        gesturePending = false;
         running = false;
         paused = false;
         notifyState(message);

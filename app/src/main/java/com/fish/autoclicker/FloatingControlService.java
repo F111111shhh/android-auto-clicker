@@ -44,6 +44,7 @@ public class FloatingControlService extends Service {
     private RegionOverlayView regionView;
     private TextView statusText;
     private Button pauseButton;
+    private Button selectButton;
     private ClickConfig config;
     private UiTheme theme;
     private boolean collapsed;
@@ -60,6 +61,16 @@ public class FloatingControlService extends Service {
     private final BroadcastReceiver stateReceiver = new BroadcastReceiver() {
         @Override
         public void onReceive(Context context, Intent intent) {
+            if (ClickConfig.ACTION_CONFIG_CHANGED.equals(intent.getAction())) {
+                config = ClickConfig.load(FloatingControlService.this);
+                if (selectButton != null) {
+                    selectButton.setText(config.randomPoint ? "选区" : "定点");
+                }
+                applyOverlayAlpha();
+                scheduleCollapse();
+                updateStatus(null);
+                return;
+            }
             updateStatus(intent.getStringExtra(ClickController.EXTRA_MESSAGE));
         }
     };
@@ -138,9 +149,9 @@ public class FloatingControlService extends Service {
         LinearLayout row1 = new LinearLayout(this);
         row1.setOrientation(LinearLayout.HORIZONTAL);
         row1.setPadding(0, dp(9), 0, 0);
-        Button start = primaryButton("开始");
+        Button start = tonalButton("开始");
         pauseButton = tonalButton("暂停");
-        Button stop = dangerButton("停止");
+        Button stop = tonalButton("停止");
         row1.addView(start, buttonParams());
         row1.addView(pauseButton, buttonParams());
         row1.addView(stop, buttonParams());
@@ -150,8 +161,9 @@ public class FloatingControlService extends Service {
         row2.setOrientation(LinearLayout.HORIZONTAL);
         row2.setPadding(0, dp(7), 0, 0);
         Button select = tonalButton(config.randomPoint ? "选区" : "定点");
+        selectButton = select;
         Button settings = tonalButton("设置");
-        Button close = quietButton("关闭");
+        Button close = tonalButton("关闭");
         row2.addView(select, buttonParams());
         row2.addView(settings, buttonParams());
         row2.addView(close, buttonParams());
@@ -313,6 +325,7 @@ public class FloatingControlService extends Service {
             panelView = null;
             statusText = null;
             pauseButton = null;
+            selectButton = null;
         }
     }
 
@@ -369,31 +382,10 @@ public class FloatingControlService extends Service {
         return button;
     }
 
-    private Button primaryButton(String text) {
-        Button button = baseButton(text);
-        button.setTextColor(theme.onAccent());
-        button.setBackground(theme.ripple(theme.rounded(theme.accent, 16, this), theme.accentStrong));
-        return button;
-    }
-
     private Button tonalButton(String text) {
         Button button = baseButton(text);
         button.setTextColor(theme.accentStrong);
-        button.setBackground(theme.ripple(theme.rounded(theme.accentSoft, 16, this), theme.accent));
-        return button;
-    }
-
-    private Button dangerButton(String text) {
-        Button button = baseButton(text);
-        button.setTextColor(Color.WHITE);
-        button.setBackground(theme.ripple(theme.rounded(theme.danger, 16, this), theme.danger));
-        return button;
-    }
-
-    private Button quietButton(String text) {
-        Button button = baseButton(text);
-        button.setTextColor(theme.text);
-        button.setBackground(theme.ripple(theme.stroked(theme.surfaceHigh, theme.outline, 16, this), theme.accent));
+        button.setBackground(theme.ripple(theme.rounded(theme.accentContainer, 16, this), theme.accent));
         return button;
     }
 
@@ -466,7 +458,10 @@ public class FloatingControlService extends Service {
         } else {
             state = message == null ? "待开始" : message;
         }
-        statusText.setText(state + "\n" + ClickConfig.load(this).describeRegion());
+        String region = controller.isRunning()
+                ? controller.activeRegionDescription()
+                : ClickConfig.load(this).describeRegion();
+        statusText.setText(state + "\n" + region);
         if (pauseButton != null) {
             pauseButton.setText(controller.isPaused() ? "继续" : "暂停");
         }
@@ -474,6 +469,7 @@ public class FloatingControlService extends Service {
 
     private void registerReceiverCompat() {
         IntentFilter filter = new IntentFilter(ClickController.ACTION_STATE_CHANGED);
+        filter.addAction(ClickConfig.ACTION_CONFIG_CHANGED);
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             registerReceiver(stateReceiver, filter, Context.RECEIVER_NOT_EXPORTED);
         } else {
@@ -754,11 +750,10 @@ public class FloatingControlService extends Service {
             float left = (getWidth() - total) / 2f + index * (width + gap);
             float top = getHeight() - dp(70);
             Paint buttonPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
-            boolean quiet = index == 2 || (!selectingRandomRange && index == 1);
-            buttonPaint.setColor(quiet ? UiTheme.withAlpha(Color.WHITE, 238) : theme.accent);
+            buttonPaint.setColor(theme.accentContainer);
             RectF button = new RectF(left, top, left + width, top + height);
-            canvas.drawRoundRect(button, dp(18), dp(18), buttonPaint);
-            textPaint.setColor(quiet ? theme.text : theme.onAccent());
+            UiTheme.drawSmoothRoundRect(canvas, button, dp(23), buttonPaint);
+            textPaint.setColor(theme.accentStrong);
             Paint.FontMetrics metrics = textPaint.getFontMetrics();
             float textX = left + (width - textPaint.measureText(text)) / 2f;
             float textY = top + (height - metrics.bottom + metrics.top) / 2f - metrics.top;

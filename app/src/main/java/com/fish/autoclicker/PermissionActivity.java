@@ -141,7 +141,7 @@ public class PermissionActivity extends android.app.Activity {
         bodyView.setPadding(0, dp(10), 0, dp(14));
         card.addView(bodyView);
 
-        Button button = primaryButton(accessibility ? "去开启辅助功能" : "去开启悬浮窗");
+        Button button = quietButton(accessibility ? "去开启辅助功能" : "去开启悬浮窗");
         button.setOnClickListener(listener);
         card.addView(button, new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT,
@@ -180,14 +180,14 @@ public class PermissionActivity extends android.app.Activity {
     private Button primaryButton(String text) {
         Button button = baseButton(text);
         button.setTextColor(theme.onAccent());
-        button.setBackground(theme.ripple(theme.rounded(theme.accent, 18, this), theme.accentStrong));
+        button.setBackground(theme.ripple(theme.rounded(theme.accent, 20, this), theme.accentStrong));
         return button;
     }
 
     private Button quietButton(String text) {
         Button button = baseButton(text);
-        button.setTextColor(theme.text);
-        button.setBackground(theme.ripple(theme.stroked(theme.surface, theme.outline, 18, this), theme.accent));
+        button.setTextColor(theme.accentStrong);
+        button.setBackground(theme.ripple(theme.rounded(theme.accentContainer, 20, this), theme.accent));
         return button;
     }
 

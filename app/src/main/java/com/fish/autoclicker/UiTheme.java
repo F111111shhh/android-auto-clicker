@@ -23,6 +23,7 @@ final class UiTheme {
     final int accentStrong;
     final int accentSoft;
     final int accentContainer;
+    final int accentTrack;
     final int background;
     final int surface;
     final int surfaceHigh;
@@ -38,6 +39,7 @@ final class UiTheme {
         this.accentStrong = shiftValue(accent, 0.72f);
         this.accentSoft = mix(Color.WHITE, accent, 0.13f);
         this.accentContainer = mix(Color.WHITE, accent, 0.22f);
+        this.accentTrack = mix(Color.WHITE, accent, 0.42f);
         this.background = mix(Color.rgb(248, 250, 252), accent, 0.05f);
         this.surface = mix(Color.WHITE, accent, 0.035f);
         this.surfaceHigh = mix(Color.WHITE, accent, 0.08f);
@@ -58,11 +60,22 @@ final class UiTheme {
     }
 
     Drawable rounded(int color, float radiusDp, Context context) {
-        return new SmoothDrawable(color, 0, 0, dp(context, Math.round(radiusDp)));
+        return new SmoothDrawable(color, 0, 0, smoothRadiusPx(context, radiusDp));
     }
 
     Drawable stroked(int color, int strokeColor, float radiusDp, Context context) {
-        return new SmoothDrawable(color, strokeColor, dp(context, 1), dp(context, Math.round(radiusDp)));
+        return new SmoothDrawable(color, strokeColor, dp(context, 1), smoothRadiusPx(context, radiusDp));
+    }
+
+    static void drawSmoothRoundRect(Canvas canvas, RectF rect, float radiusPx, Paint paint) {
+        Path path = new Path();
+        SmoothDrawable.buildContinuousRoundRect(rect,
+                Math.min(radiusPx, Math.min(rect.width(), rect.height()) / 2f), path);
+        canvas.drawPath(path, paint);
+    }
+
+    private static int smoothRadiusPx(Context context, float radiusDp) {
+        return dp(context, Math.round(radiusDp * 1.5f));
     }
 
     Drawable ripple(Drawable content, int rippleColor) {
@@ -175,8 +188,8 @@ final class UiTheme {
 
         private static void appendSuperellipseCorner(Path out, float centerX, float centerY,
                                                      float radius, double start, double end) {
-            double exponent = 4.6d;
-            int steps = Math.max(8, Math.min(18, Math.round(radius / 3f)));
+            double exponent = 3.7d;
+            int steps = Math.max(16, Math.min(36, Math.round(radius / 2f)));
             for (int i = 1; i <= steps; i++) {
                 double t = start + (end - start) * i / steps;
                 double cos = Math.cos(t);
@@ -187,10 +200,11 @@ final class UiTheme {
             }
         }
 
-        private static float signedPow(double value, double power) {
-            double magnitude = Math.pow(Math.abs(value), power);
-            return (float) (value < 0d ? -magnitude : magnitude);
-        }
+    }
+
+    private static float signedPow(double value, double power) {
+        double magnitude = Math.pow(Math.abs(value), power);
+        return (float) (value < 0d ? -magnitude : magnitude);
     }
 
     private static int resolveAccent(Context context) {
